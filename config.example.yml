@@ -6,27 +6,17 @@ discord:
 email:
   api_key: ${RESEND_API_KEY}
   from: "SŠPU Discord bot <discord-bot@sspu-opava.cz>"
-  subject: "Discord ověření - ověřovací kód"
+  subject: "Discord ověření — ověřovací kód"
 
-roles:
-  ids:
-    IT1: ""
-    IT2: ""
-    IT3: ""
-    IT4: ""
-    Uo1: ""
-    Uo2: ""
-    Uo3: ""
-    Uo4: ""
-    Sv1A: ""
-    Sv2A: ""
-    Sv3A: ""
-    Sv4A: ""
-    Sv1B: ""
-    Sv2B: ""
-    Sv3B: ""
-    Sv4B: ""
-    Absolvent: ""
+# Nepovinné — vlastní názvy rolí. Bez této sekce bot použije výchozí
+# názvy IT1–IT4, Uo1–Uo4, Sv1A–Sv4A, Sv1B–Sv4B a Absolvent.
+# roles:
+#   absolvent: "Absolvent"
+#   names:
+#     it: ["IT1", "IT2", "IT3", "IT4"]
+#     uo: ["Uo1", "Uo2", "Uo3", "Uo4"]
+#     sva: ["Sv1A", "Sv2A", "Sv3A", "Sv4A"]
+#     svb: ["Sv1B", "Sv2B", "Sv3B", "Sv4B"]
 
 verification:
   code_ttl: 10m

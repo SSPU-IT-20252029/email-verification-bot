@@ -16,12 +16,13 @@ import (
 )
 
 var (
-	ErrNotActive       = errors.New("verify: e-mail zatím není aktivní, školní rok pro něj ještě nezačal")
-	ErrRateLimited     = errors.New("verify: překročen limit odeslaných kódů, zkus to později")
-	ErrNoPending       = errors.New("verify: žádný čekající kód, použij nejdřív /verify")
-	ErrExpired         = errors.New("verify: kód vypršel")
-	ErrTooManyAttempts = errors.New("verify: příliš mnoho pokusů")
-	ErrSendFailed      = errors.New("verify: odeslání e-mailu selhalo")
+	ErrNotActive        = errors.New("verify: e-mail zatím není aktivní, školní rok pro něj ještě nezačal")
+	ErrRateLimited      = errors.New("verify: překročen limit odeslaných kódů, zkus to později")
+	ErrNoPending        = errors.New("verify: žádný čekající kód, použij nejdřív /verify")
+	ErrExpired          = errors.New("verify: kód vypršel")
+	ErrTooManyAttempts  = errors.New("verify: příliš mnoho pokusů")
+	ErrSendFailed       = errors.New("verify: odeslání e-mailu selhalo")
+	ErrEmailAlreadyUsed = errors.New("verify: e-mail je přiřazen k jinému uživateli")
 )
 
 type WrongCodeError struct {
@@ -64,6 +65,9 @@ func (s *Service) Start(ctx context.Context, discordID, email string) error {
 	now := s.Now()
 	if _, ok := mail.Role(now); !ok {
 		return ErrNotActive
+	}
+	if existing, ok, err := s.store.GetVerifiedByEmail(ctx, mail.String()); err == nil && ok && existing.DiscordID != discordID {
+		return ErrEmailAlreadyUsed
 	}
 	sent, err := s.store.CountSendsSince(ctx, discordID, now.Add(-time.Hour))
 	if err != nil {

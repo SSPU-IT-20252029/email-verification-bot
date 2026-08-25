@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"sspu-verifier/internal/class"
 )
 
 func writeConfig(t *testing.T, content string) string {
@@ -18,15 +16,6 @@ func writeConfig(t *testing.T, content string) string {
 	return path
 }
 
-var validRoles = func() string {
-	var b strings.Builder
-	b.WriteString("roles:\n  ids:\n")
-	for _, name := range class.AllRoleNames() {
-		b.WriteString("    " + name + ": \"111\"\n")
-	}
-	return b.String()
-}()
-
 func baseConfig() string {
 	return `
 discord:
@@ -36,7 +25,7 @@ discord:
 email:
   api_key: "re_test_123"
   from: "bot@sspu-opava.cz"
-` + validRoles
+`
 }
 
 func TestLoadValid(t *testing.T) {
@@ -64,26 +53,88 @@ func TestLoadEnvExpansion(t *testing.T) {
 	}
 }
 
-func TestLoadMissingRole(t *testing.T) {
+func TestLoadMissingChannel(t *testing.T) {
 	path := writeConfig(t, `
 discord:
   token: "tok"
   guild_id: "1"
-  verify_channel_id: "2"
 email:
-  api_key: "re_test_123"
+  api_key: "re_x"
   from: "a@b.cz"
-roles:
-  ids:
-    IT1: "111"
 `)
-	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "Uo1") {
-		t.Fatalf("err = %v, want missing Uo1", err)
+	if _, err := Load(path); err == nil || !strings.Contains(err.Error(), "verify_channel_id") {
+		t.Fatalf("err = %v, want missing verify_channel_id", err)
 	}
 }
 
 func TestLoadMissingFile(t *testing.T) {
 	if _, err := Load(filepath.Join(t.TempDir(), "nope.yml")); err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestDefaultRoleNames(t *testing.T) {
+	cfg, err := Load(writeConfig(t, baseConfig()))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Roles.Absolvent != "Absolvent" {
+		t.Fatalf("absolvent = %q", cfg.Roles.Absolvent)
+	}
+	if got := cfg.Roles.DisplayName("IT2"); got != "IT2" {
+		t.Fatalf("DisplayName(IT2) = %q", got)
+	}
+	if got := cfg.Roles.DisplayName("Sv3B"); got != "Sv3B" {
+		t.Fatalf("DisplayName(Sv3B) = %q", got)
+	}
+}
+
+func TestCustomRoleNames(t *testing.T) {
+	path := writeConfig(t, baseConfig()+`
+roles:
+  absolvent: "Maturanti"
+  names:
+    it: ["Prima IT", "Sekunda IT", "Tercie IT", "Kvarta IT"]
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.Roles.DisplayName("IT1"); got != "Prima IT" {
+		t.Fatalf("DisplayName(IT1) = %q", got)
+	}
+	if got := cfg.Roles.DisplayName("IT4"); got != "Kvarta IT" {
+		t.Fatalf("DisplayName(IT4) = %q", got)
+	}
+	if got := cfg.Roles.DisplayName("Absolvent"); got != "Maturanti" {
+		t.Fatalf("DisplayName(Absolvent) = %q", got)
+	}
+	if got := cfg.Roles.DisplayName("Uo1"); got != "Uo1" {
+		t.Fatalf("nezměněný obor: DisplayName(Uo1) = %q", got)
+	}
+}
+
+func TestDuplicateRoleNamesRejected(t *testing.T) {
+	path := writeConfig(t, baseConfig()+`
+roles:
+  names:
+    it: ["X", "Y", "Z", "W"]
+    uo: ["X", "Uo2", "Uo3", "Uo4"]
+`)
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "duplicitní") {
+		t.Fatalf("err = %v, want duplicitní název", err)
+	}
+}
+
+func TestWrongRoleNameCountRejected(t *testing.T) {
+	path := writeConfig(t, baseConfig()+`
+roles:
+  names:
+    sva: ["Sv1A", "Sv2A", "Sv3A"]
+`)
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "4 názvy") {
+		t.Fatalf("err = %v, want 4 názvy", err)
 	}
 }

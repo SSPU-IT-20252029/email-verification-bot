@@ -189,3 +189,31 @@ func TestSendFailureKeepsStateConsistent(t *testing.T) {
 		t.Fatalf("err = %v, want ErrSendFailed", err)
 	}
 }
+
+func TestStartRejectsEmailAlreadyUsed(t *testing.T) {
+	fm := &fakeMailer{}
+	svc := newTestService(t, fm)
+	svc.Now = func() time.Time { return october2026 }
+	ctx := context.Background()
+
+	// user1 verifies it2501@sspu-opava.cz successfully
+	if err := svc.Start(ctx, "user1", "it2501@sspu-opava.cz"); err != nil {
+		t.Fatalf("Start user1: %v", err)
+	}
+	if _, err := svc.Confirm(ctx, "user1", fm.lastCod); err != nil {
+		t.Fatalf("Confirm user1: %v", err)
+	}
+
+	// user2 tries the same email → rejected
+	if err := svc.Start(ctx, "user2", "it2501@sspu-opava.cz"); !errors.Is(err, ErrEmailAlreadyUsed) {
+		t.Fatalf("err = %v, want ErrEmailAlreadyUsed", err)
+	}
+	if fm.sent != 1 {
+		t.Fatalf("mailer should not have sent, sent=%d", fm.sent)
+	}
+
+	// user1 re-verifying same email → allowed
+	if err := svc.Start(ctx, "user1", "it2501@sspu-opava.cz"); err != nil {
+		t.Fatalf("user1 re-verify: %v", err)
+	}
+}

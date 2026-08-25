@@ -69,6 +69,10 @@ CREATE TABLE IF NOT EXISTS send_log (
 	sent_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_send_log_user_time ON send_log(discord_id, sent_at);
+CREATE TABLE IF NOT EXISTS meta (
+	key   TEXT PRIMARY KEY,
+	value TEXT NOT NULL
+);
 `
 	_, err := s.db.Exec(schema)
 	if err != nil {
@@ -103,6 +107,22 @@ func (s *Store) GetVerified(ctx context.Context, discordID string) (VerifiedUser
 	}
 	if err != nil {
 		return VerifiedUser{}, false, fmt.Errorf("čtení ověřeného uživatele: %w", err)
+	}
+	v.VerifiedAt = time.Unix(at, 0)
+	return v, true, nil
+}
+
+func (s *Store) GetVerifiedByEmail(ctx context.Context, email string) (VerifiedUser, bool, error) {
+	var v VerifiedUser
+	var at int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT discord_id, email, role, verified_at FROM verified_users WHERE email = ?`, email).
+		Scan(&v.DiscordID, &v.Email, &v.Role, &at)
+	if err == sql.ErrNoRows {
+		return VerifiedUser{}, false, nil
+	}
+	if err != nil {
+		return VerifiedUser{}, false, fmt.Errorf("čtení ověřeného uživatele podle e-mailu: %w", err)
 	}
 	v.VerifiedAt = time.Unix(at, 0)
 	return v, true, nil
@@ -195,4 +215,27 @@ func (s *Store) CountSendsSince(ctx context.Context, discordID string, since tim
 		return 0, fmt.Errorf("čtení send_log: %w", err)
 	}
 	return n, nil
+}
+
+func (s *Store) GetMeta(ctx context.Context, key string) (string, bool, error) {
+	var v string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("čtení meta %q: %w", key, err)
+	}
+	return v, true, nil
+}
+
+func (s *Store) SetMeta(ctx context.Context, key, value string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO meta (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+		key, value)
+	if err != nil {
+		return fmt.Errorf("ukládání meta %q: %w", key, err)
+	}
+	return nil
 }

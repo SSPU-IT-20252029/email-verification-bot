@@ -75,6 +75,11 @@ func (m Mail) Role(now time.Time) (string, bool) {
 	}
 }
 
+// RoleName vrací název role pro daný typ třídy a ročník (1–4), např. "IT2", "Sv3A".
+func RoleName(t Type, grade int) string {
+	return roleName(t, grade)
+}
+
 func roleName(t Type, grade int) string {
 	switch t {
 	case IT:
@@ -101,4 +106,9 @@ func AllRoleNames() []string {
 		)
 	}
 	return append(names, RoleAbsolvent)
+}
+
+// ChainTypes vrací všechny typy tříd v pevném pořadí.
+func ChainTypes() []Type {
+	return []Type{IT, UO, SvA, SvB}
 }
