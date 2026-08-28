@@ -302,7 +302,15 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if *debugMode {
-		log.Printf("[DEBUG] Interaction: type=%d guild=%s user=%s cmd=%s", i.Type, i.GuildID, i.Member.User.ID, i.ApplicationCommandData().Name)
+		cmdName := ""
+		if i.Type == discordgo.InteractionApplicationCommand {
+			cmdName = i.ApplicationCommandData().Name
+		} else if i.Type == discordgo.InteractionModalSubmit {
+			cmdName = i.ModalSubmitData().CustomID
+		} else {
+			cmdName = fmt.Sprintf("component:%s", i.MessageComponentData().CustomID)
+		}
+		log.Printf("[DEBUG] Interaction: type=%d guild=%s user=%s cmd=%s", i.Type, i.GuildID, i.Member.User.ID, cmdName)
 	}
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
