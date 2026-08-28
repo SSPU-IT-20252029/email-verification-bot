@@ -193,14 +193,25 @@ func (s *Store) migrateRateLimit() error {
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		return err
 	}
+
+	var hasOldColumn bool
+	err = s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('guilds') WHERE name = 'rate_limit_per_hour'`).Scan(&hasOldColumn)
+	if err != nil {
+		return err
+	}
+
+	if hasOldColumn {
+		_, err = s.db.Exec(`UPDATE guilds SET rate_limit_count = rate_limit_per_hour, rate_limit_window = 15 WHERE rate_limit_per_hour IS NOT NULL AND rate_limit_count = 3 AND rate_limit_window = 15`)
+		if err != nil {
+			return err
+		}
+	}
+
 	_, err = s.db.Exec(`UPDATE guilds SET rate_limit_count = COALESCE(NULLIF(rate_limit_count, 0), 3), rate_limit_window = COALESCE(NULLIF(rate_limit_window, 0), 15) WHERE rate_limit_count IS NULL OR rate_limit_window IS NULL`)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`UPDATE guilds SET rate_limit_count = rate_limit_per_hour, rate_limit_window = 15 WHERE rate_limit_per_hour IS NOT NULL AND rate_limit_count = 3 AND rate_limit_window = 15`)
-	if err != nil {
-		return err
-	}
+
 	return nil
 }
 

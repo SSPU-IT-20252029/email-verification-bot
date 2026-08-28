@@ -24,6 +24,7 @@ import (
 )
 
 var configPath = flag.String("config", "config.yml", "Path to configuration file")
+var debugMode = flag.Bool("debug", false, "Enable debug logging")
 
 type Bot struct {
 	session *discordgo.Session
@@ -33,6 +34,11 @@ type Bot struct {
 
 func main() {
 	flag.Parse()
+
+	if *debugMode {
+		log.SetFlags(log.LstdFlags | log.Lshortfile)
+		log.Println("Debug mode enabled")
+	}
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
@@ -51,6 +57,11 @@ func main() {
 	dg, err := discordgo.New("Bot " + cfg.Discord.Token)
 	if err != nil {
 		log.Fatalf("Error creating Discord session: %v", err)
+	}
+
+	if *debugMode {
+		dg.LogLevel = discordgo.LogDebug
+		log.Println("Discord session debug logging enabled")
 	}
 
 	bot := &Bot{
@@ -187,7 +198,7 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 					},
 				},
 				{
-					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Type:        discordgo.ApplicationCommandOptionSubCommandGroup,
 					Name:        "group",
 					Description: en.RegexGroupDesc,
 					Options: []*discordgo.ApplicationCommandOption{
@@ -231,7 +242,6 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 					Name:        "upload",
 					Description: en.CsvUpload,
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: en.CsvFile, Required: true},
 						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: en.CsvFile, Required: true},
 					},
 				},
@@ -291,6 +301,9 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if *debugMode {
+		log.Printf("[DEBUG] Interaction: type=%d guild=%s user=%s cmd=%s", i.Type, i.GuildID, i.Member.User.ID, i.ApplicationCommandData().Name)
+	}
 	switch i.Type {
 	case discordgo.InteractionApplicationCommand:
 		b.handleSlashCommand(s, i)
