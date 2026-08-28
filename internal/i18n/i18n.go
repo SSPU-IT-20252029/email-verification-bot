@@ -53,6 +53,11 @@ type Translations struct {
 	RateLimitCountDesc string
 	RateLimitWindowDesc string
 	RateLimitSetFmt  string
+	HelpDesc         string
+	HelpText         string
+	HelpAdminTitle   string
+	HelpUserTitle    string
+	HelpClickHint    string
 
 	VerifyBtn        string
 	EnterCodeBtn     string
@@ -139,6 +144,11 @@ var en = Translations{
 	RateLimitCountDesc: "Max emails (1-3)",
 	RateLimitWindowDesc: "Window in minutes (1-60)",
 	RateLimitSetFmt:  "Rate limit set to %s",
+	HelpDesc:         "Show all commands",
+	HelpText:         "Available Commands",
+	HelpAdminTitle:   "Administrator",
+	HelpUserTitle:    "User",
+	HelpClickHint:    "Tip: Type / to see all commands in Discord",
 
 	VerifyBtn:        "Verify",
 	EnterCodeBtn:     "Enter Code",
@@ -225,6 +235,11 @@ var cs = Translations{
 	RateLimitCountDesc: "Max emailů (1-3)",
 	RateLimitWindowDesc: "Časové okno v minutách (1-60)",
 	RateLimitSetFmt:  "Limit nastaven na %s",
+	HelpDesc:         "Zobrazit všechny příkazy",
+	HelpText:         "Dostupné příkazy",
+	HelpAdminTitle:   "Administrátor",
+	HelpUserTitle:    "Uživatel",
+	HelpClickHint:    "Tip: Zadej / pro zobrazení všech příkazů v Discordu",
 
 	VerifyBtn:        "Ověřit",
 	EnterCodeBtn:     "Zadat kód",

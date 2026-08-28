@@ -292,6 +292,10 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 				},
 			},
 		},
+		{
+			Name:        "help",
+			Description: en.HelpDesc,
+		},
 	}
 
 	_, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, "", commands)
@@ -335,6 +339,8 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 		b.cmdLanguage(s, i)
 	case "ratelimit":
 		b.cmdRateLimit(s, i)
+	case "help":
+		b.cmdHelp(s, i)
 	}
 }
 
@@ -741,6 +747,32 @@ func (b *Bot) cmdRateLimit(s *discordgo.Session, i *discordgo.InteractionCreate)
 	}
 
 	respondOK(s, i, fmt.Sprintf("%s %d / %d min.", t.RateLimitSetFmt, cfg.RateLimitCount, int(cfg.RateLimitWindow.Minutes())))
+}
+
+func (b *Bot) cmdHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
+
+	description := t.HelpClickHint + "\n\n"
+	description += "**" + t.HelpAdminTitle + "**\n"
+	description += "`/setup` - " + t.SetupDesc + "\n"
+	description += "`/regex` - " + t.RegexDesc + "\n"
+	description += "`/csv` - " + t.CsvDesc + "\n"
+	description += "`/ratelimit` - " + t.RateLimitDesc + "\n\n"
+	description += "**" + t.HelpUserTitle + "**\n"
+	description += "`/language` - " + t.LanguageDesc + "\n"
+	description += "`/help` - " + t.HelpDesc
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{{
+				Title:       t.HelpText,
+				Description: description,
+				Color:       0x3b82f6,
+			}},
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	})
 }
 
 func respondOK(s *discordgo.Session, i *discordgo.InteractionCreate, msg string) {
