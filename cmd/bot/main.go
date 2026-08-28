@@ -62,7 +62,7 @@ func main() {
 	dg.AddHandler(bot.onReady)
 	dg.AddHandler(bot.onInteractionCreate)
 
-	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers
+	dg.Identify.Intents = discordgo.IntentsGuilds
 
 	if err := dg.Open(); err != nil {
 		log.Fatalf("Error connecting to Discord: %v", err)
