@@ -30,6 +30,7 @@ type RegexRule struct {
 	Pattern  string
 	RoleID   string
 	Priority int
+	GroupIndex int
 }
 
 type VerifiedUser struct {
@@ -90,7 +91,16 @@ CREATE TABLE IF NOT EXISTS regex_rules (
 	guild_id TEXT REFERENCES guilds(guild_id) ON DELETE CASCADE,
 	pattern  TEXT NOT NULL,
 	role_id  TEXT NOT NULL,
-	priority INTEGER NOT NULL DEFAULT 0
+	priority INTEGER NOT NULL DEFAULT 0,
+	group_index INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS regex_group_roles (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	guild_id   TEXT REFERENCES guilds(guild_id) ON DELETE CASCADE,
+	rule_id    INTEGER REFERENCES regex_rules(id) ON DELETE CASCADE,
+	group_value TEXT NOT NULL,
+	role_id    TEXT NOT NULL,
+	UNIQUE(guild_id, rule_id, group_value)
 );
 CREATE TABLE IF NOT EXISTS csv_mappings (
 	id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,6 +158,28 @@ CREATE TABLE IF NOT EXISTS user_locales (
 	}
 	if err := s.migrateRateLimit(); err != nil {
 		return fmt.Errorf("rate limit migration: %w", err)
+	}
+	if err := s.migrateRegexGroups(); err != nil {
+		return fmt.Errorf("regex groups migration: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) migrateRegexGroups() error {
+	_, err := s.db.Exec(`ALTER TABLE regex_rules ADD COLUMN group_index INTEGER NOT NULL DEFAULT 0`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	_, err = s.db.Exec(`CREATE TABLE IF NOT EXISTS regex_group_roles (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		guild_id TEXT REFERENCES guilds(guild_id) ON DELETE CASCADE,
+		rule_id INTEGER REFERENCES regex_rules(id) ON DELETE CASCADE,
+		group_value TEXT NOT NULL,
+		role_id TEXT NOT NULL,
+		UNIQUE(guild_id, rule_id, group_value)
+	)`)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -235,8 +267,8 @@ func (s *Store) ListGuildConfigs(ctx context.Context) ([]GuildConfig, error) {
 // Regex Rules
 func (s *Store) AddRegexRule(ctx context.Context, r RegexRule) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO regex_rules (guild_id, pattern, role_id, priority) VALUES (?, ?, ?, ?)`,
-		r.GuildID, r.Pattern, r.RoleID, r.Priority)
+		`INSERT INTO regex_rules (guild_id, pattern, role_id, priority, group_index) VALUES (?, ?, ?, ?, ?)`,
+		r.GuildID, r.Pattern, r.RoleID, r.Priority, r.GroupIndex)
 	return err
 }
 
@@ -247,7 +279,7 @@ func (s *Store) RemoveRegexRule(ctx context.Context, id int) error {
 
 func (s *Store) ListRegexRules(ctx context.Context, guildID string) ([]RegexRule, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, guild_id, pattern, role_id, priority FROM regex_rules WHERE guild_id = ? ORDER BY priority DESC`, guildID)
+		`SELECT id, guild_id, pattern, role_id, priority, group_index FROM regex_rules WHERE guild_id = ? ORDER BY priority DESC`, guildID)
 	if err != nil {
 		return nil, err
 	}
@@ -255,12 +287,69 @@ func (s *Store) ListRegexRules(ctx context.Context, guildID string) ([]RegexRule
 	var out []RegexRule
 	for rows.Next() {
 		var r RegexRule
-		if err := rows.Scan(&r.ID, &r.GuildID, &r.Pattern, &r.RoleID, &r.Priority); err != nil {
+		if err := rows.Scan(&r.ID, &r.GuildID, &r.Pattern, &r.RoleID, &r.Priority, &r.GroupIndex); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+func (s *Store) AddRegexGroupRole(ctx context.Context, guildID string, ruleID, groupValue, roleID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO regex_group_roles (guild_id, rule_id, group_value, role_id) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(guild_id, rule_id, group_value) DO UPDATE SET role_id = excluded.role_id`,
+		guildID, ruleID, groupValue, roleID)
+	return err
+}
+
+func (s *Store) RemoveRegexGroupRole(ctx context.Context, id int) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM regex_group_roles WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) ListRegexGroupRoles(ctx context.Context, guildID string, ruleID string) ([]struct {
+	ID int
+	GroupValue string
+	RoleID string
+}, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, group_value, role_id FROM regex_group_roles WHERE guild_id = ? AND rule_id = ?`, guildID, ruleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		ID int
+		GroupValue string
+		RoleID string
+	}
+	for rows.Next() {
+		var item struct {
+			ID int
+			GroupValue string
+			RoleID string
+		}
+		if err := rows.Scan(&item.ID, &item.GroupValue, &item.RoleID); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func (s *Store) GetRoleByRegexGroup(ctx context.Context, guildID, ruleID, groupValue string) (string, bool, error) {
+	var roleID string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT role_id FROM regex_group_roles WHERE guild_id = ? AND rule_id = ? AND group_value = ?`,
+		guildID, ruleID, groupValue).Scan(&roleID)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return roleID, true, nil
 }
 
 // CSV Data

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -171,9 +172,28 @@ func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) 
 		}
 		for _, rule := range rules {
 			matched, err := regexp.MatchString(rule.Pattern, email)
-			if err == nil && matched {
-				return rule.RoleID, nil
+			if err != nil || !matched {
+				continue
 			}
+			if rule.GroupIndex > 0 {
+				re, err := regexp.Compile(rule.Pattern)
+				if err != nil {
+					continue
+				}
+				matches := re.FindStringSubmatch(email)
+				if len(matches) > rule.GroupIndex {
+					groupValue := matches[rule.GroupIndex]
+					roleID, ok, err := s.store.GetRoleByRegexGroup(ctx, guildID, strconv.Itoa(rule.ID), groupValue)
+					if err != nil {
+						return "", err
+					}
+					if ok {
+						return roleID, nil
+					}
+				}
+				continue
+			}
+			return rule.RoleID, nil
 		}
 		return "", ErrNotActive
 	} else if mode == "CSV" {

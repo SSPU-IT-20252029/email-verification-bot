@@ -32,7 +32,16 @@ type Translations struct {
 	RegexPattern     string
 	RegexRole        string
 	RegexPriority    string
+	RegexGroupIndex  string
 	RegexID          string
+	RegexGroupDesc   string
+	RegexGroupAdd    string
+	RegexGroupList   string
+	RegexGroupRemove string
+	RegexGroupValue  string
+	RegexGroupRoleID string
+	RegexGroupAddedFmt string
+	RegexGroupRemoved string
 	CsvUpload        string
 	CsvMap           string
 	CsvFile          string
@@ -109,7 +118,16 @@ var en = Translations{
 	RegexPattern:     "Regex pattern",
 	RegexRole:        "Target role",
 	RegexPriority:    "Priority (higher = more important)",
+	RegexGroupIndex:  "Capture group index (0 = disabled)",
 	RegexID:          "Rule ID",
+	RegexGroupDesc:   "Manage regex group mappings",
+	RegexGroupAdd:    "Add group mapping",
+	RegexGroupList:   "List group mappings",
+	RegexGroupRemove: "Remove group mapping",
+	RegexGroupValue:  "Group value",
+	RegexGroupRoleID: "Mapping ID",
+	RegexGroupAddedFmt: "Group value `%s` mapped to role <@&%s>.",
+	RegexGroupRemoved: "Group mapping removed.",
 	CsvUpload:        "Upload a CSV file (email,class)",
 	CsvMap:           "Map a class to a role",
 	CsvFile:          "CSV file",
@@ -186,7 +204,16 @@ var cs = Translations{
 	RegexPattern:     "Regex vzor",
 	RegexRole:        "Cílová role",
 	RegexPriority:    "Priorita (vyšší = důležitější)",
+	RegexGroupIndex:  "Index capture group (0 = vypnuto)",
 	RegexID:          "ID pravidla",
+	RegexGroupDesc:   "Správa mapování regex skupin",
+	RegexGroupAdd:    "Přidat mapování skupiny",
+	RegexGroupList:   "Zobrazit mapování skupin",
+	RegexGroupRemove: "Odebrat mapování skupiny",
+	RegexGroupValue:  "Hodnota skupiny",
+	RegexGroupRoleID: "ID mapování",
+	RegexGroupAddedFmt: "Hodnota skupiny `%s` mapována na roli <@&%s>.",
+	RegexGroupRemoved: "Mapování skupiny odstraněno.",
 	CsvUpload:        "Nahrát CSV soubor (email,trida)",
 	CsvMap:           "Namapovat třídu na roli",
 	CsvFile:          "CSV soubor",

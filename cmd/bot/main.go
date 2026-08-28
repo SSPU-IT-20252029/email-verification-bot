@@ -170,6 +170,7 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 						{Type: discordgo.ApplicationCommandOptionString, Name: "pattern", Description: en.RegexPattern, Required: true},
 						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: en.RegexRole, Required: true},
 						{Type: discordgo.ApplicationCommandOptionInteger, Name: "priority", Description: en.RegexPriority, Required: false},
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "group_index", Description: en.RegexGroupIndex, Required: false},
 					},
 				},
 				{
@@ -183,6 +184,39 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 					Description: en.RegexRemove,
 					Options: []*discordgo.ApplicationCommandOption{
 						{Type: discordgo.ApplicationCommandOptionInteger, Name: "id", Description: en.RegexID, Required: true},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "group",
+					Description: en.RegexGroupDesc,
+					Options: []*discordgo.ApplicationCommandOption{
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "add",
+							Description: en.RegexGroupAdd,
+							Options: []*discordgo.ApplicationCommandOption{
+								{Type: discordgo.ApplicationCommandOptionString, Name: "rule_id", Description: en.RegexID, Required: true},
+								{Type: discordgo.ApplicationCommandOptionString, Name: "group_value", Description: en.RegexGroupValue, Required: true},
+								{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: en.RegexRole, Required: true},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "list",
+							Description: en.RegexGroupList,
+							Options: []*discordgo.ApplicationCommandOption{
+								{Type: discordgo.ApplicationCommandOptionString, Name: "rule_id", Description: en.RegexID, Required: true},
+							},
+						},
+						{
+							Type:        discordgo.ApplicationCommandOptionSubCommand,
+							Name:        "remove",
+							Description: en.RegexGroupRemove,
+							Options: []*discordgo.ApplicationCommandOption{
+								{Type: discordgo.ApplicationCommandOptionInteger, Name: "id", Description: en.RegexGroupRoleID, Required: true},
+							},
+						},
 					},
 				},
 			},
@@ -351,6 +385,7 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	case "add":
 		var pattern, roleID string
 		priority := 0
+		groupIndex := 0
 		for _, o := range subcmd.Options {
 			switch o.Name {
 			case "pattern":
@@ -359,13 +394,16 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				roleID = o.RoleValue(nil, "").ID
 			case "priority":
 				priority = int(o.IntValue())
+			case "group_index":
+				groupIndex = int(o.IntValue())
 			}
 		}
 		err := b.store.AddRegexRule(context.Background(), store.RegexRule{
-			GuildID:  i.GuildID,
-			Pattern:  pattern,
-			RoleID:   roleID,
-			Priority: priority,
+			GuildID:    i.GuildID,
+			Pattern:    pattern,
+			RoleID:     roleID,
+			Priority:   priority,
+			GroupIndex: groupIndex,
 		})
 		if err != nil {
 			respondErr(s, i, t.FailedSave)
@@ -385,7 +423,7 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 		var msg strings.Builder
 		for _, r := range rules {
-			msg.WriteString(fmt.Sprintf("ID: %d | Pattern: `%s` | Role: <@&%s> | Priority: %d\n", r.ID, r.Pattern, r.RoleID, r.Priority))
+			msg.WriteString(fmt.Sprintf("ID: %d | Pattern: `%s` | Role: <@&%s> | Priority: %d | Group: %d\n", r.ID, r.Pattern, r.RoleID, r.Priority, r.GroupIndex))
 		}
 		respondOK(s, i, msg.String())
 
@@ -396,6 +434,58 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			return
 		}
 		respondOK(s, i, t.RuleDeleted)
+
+	case "group":
+		groupSubcmd := subcmd.Options[0]
+		switch groupSubcmd.Name {
+		case "add":
+			var ruleID, groupValue, roleID string
+			for _, o := range groupSubcmd.Options {
+				switch o.Name {
+				case "rule_id":
+					ruleID = o.StringValue()
+				case "group_value":
+					groupValue = o.StringValue()
+				case "role":
+					roleID = o.RoleValue(nil, "").ID
+				}
+			}
+			if err := b.store.AddRegexGroupRole(context.Background(), i.GuildID, ruleID, groupValue, roleID); err != nil {
+				respondErr(s, i, t.FailedMap)
+				return
+			}
+			respondOK(s, i, fmt.Sprintf(t.RegexGroupAddedFmt, groupValue, roleID))
+
+		case "list":
+			ruleID := ""
+			for _, o := range groupSubcmd.Options {
+				if o.Name == "rule_id" {
+					ruleID = o.StringValue()
+				}
+			}
+			mappings, err := b.store.ListRegexGroupRoles(context.Background(), i.GuildID, ruleID)
+			if err != nil {
+				respondErr(s, i, t.FailedLoadRules)
+				return
+			}
+			if len(mappings) == 0 {
+				respondOK(s, i, t.NoRules)
+				return
+			}
+			var msg strings.Builder
+			for _, m := range mappings {
+				msg.WriteString(fmt.Sprintf("ID: %d | Value: `%s` → Role: <@&%s>\n", m.ID, m.GroupValue, m.RoleID))
+			}
+			respondOK(s, i, msg.String())
+
+		case "remove":
+			id := int(groupSubcmd.Options[0].IntValue())
+			if err := b.store.RemoveRegexGroupRole(context.Background(), id); err != nil {
+				respondErr(s, i, t.FailedDelete)
+				return
+			}
+			respondOK(s, i, t.RegexGroupRemoved)
+		}
 	}
 }
 
