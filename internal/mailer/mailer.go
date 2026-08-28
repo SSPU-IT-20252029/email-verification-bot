@@ -12,7 +12,6 @@ import (
 
 	"sspu-verifier/internal/config"
 	"sspu-verifier/internal/i18n"
-	"sspu-verifier/internal/i18n"
 )
 
 const sendTimeout = 30 * time.Second
@@ -27,7 +26,6 @@ func New(cfg config.Email) *Mailer {
 }
 
 func (m *Mailer) SendCode(to, subject, code string, ttl time.Duration, locale i18n.Locale) error {
-func (m *Mailer) SendCode(to, subject, code string, ttl time.Duration, locale i18n.Locale) error {
 	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 	defer cancel()
 
@@ -35,8 +33,6 @@ func (m *Mailer) SendCode(to, subject, code string, ttl time.Duration, locale i1
 		From:    m.cfg.From,
 		To:      []string{to},
 		Subject: subject,
-		Text:    m.buildText(code, ttl, locale),
-		Html:    m.buildHTML(code, ttl, locale),
 		Text:    m.buildText(code, ttl, locale),
 		Html:    m.buildHTML(code, ttl, locale),
 	})
@@ -48,13 +44,9 @@ func (m *Mailer) SendCode(to, subject, code string, ttl time.Duration, locale i1
 
 func (m *Mailer) buildText(code string, ttl time.Duration, locale i18n.Locale) string {
 	t := i18n.Get(locale)
-func (m *Mailer) buildText(code string, ttl time.Duration, locale i18n.Locale) string {
-	t := i18n.Get(locale)
 	return strings.Join([]string{
 		t.EmailHello,
-		t.EmailHello,
 		"",
-		t.EmailCodeFor,
 		t.EmailCodeFor,
 		"",
 		"    " + code,
@@ -64,18 +56,15 @@ func (m *Mailer) buildText(code string, ttl time.Duration, locale i18n.Locale) s
 		fmt.Sprintf(t.EmailValidForFmt, int(ttl.Minutes())),
 		"",
 		senderName(m.cfg.From, locale),
-		senderName(m.cfg.From, locale),
 	}, "\r\n")
 }
 
 var htmlTpl = template.Must(template.New("code").Parse(`<!doctype html>
 <html lang="{{.Lang}}">
-<html lang="{{.Lang}}">
 <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background-color:#ffffff;border-radius:12px;">
 <tr><td colspan="3" style="height:32px;"></td></tr>
-<tr><td style="width:32px;"></td><td style="font-size:20px;font-weight:700;color:#111827;">{{.Title}}</td><td style="width:32px;"></td></tr>
 <tr><td style="width:32px;"></td><td style="font-size:20px;font-weight:700;color:#111827;">{{.Title}}</td><td style="width:32px;"></td></tr>
 <tr><td colspan="3" style="height:8px;"></td></tr>
 <tr><td style="width:32px;"></td><td style="font-size:15px;line-height:22px;color:#374151;">{{.Hello}}<br>{{.CodeFor}}</td><td style="width:32px;"></td></tr>
@@ -99,8 +88,6 @@ var htmlTpl = template.Must(template.New("code").Parse(`<!doctype html>
 
 func (m *Mailer) buildHTML(code string, ttl time.Duration, locale i18n.Locale) string {
 	t := i18n.Get(locale)
-func (m *Mailer) buildHTML(code string, ttl time.Duration, locale i18n.Locale) string {
-	t := i18n.Get(locale)
 	var sb strings.Builder
 	err := htmlTpl.Execute(&sb, map[string]any{
 		"Code":    code,
@@ -120,10 +107,8 @@ func (m *Mailer) buildHTML(code string, ttl time.Duration, locale i18n.Locale) s
 }
 
 func senderName(from string, locale i18n.Locale) string {
-func senderName(from string, locale i18n.Locale) string {
 	if open := strings.Index(from, "<"); open > 0 {
 		return strings.TrimSpace(from[:open])
 	}
-	return i18n.Get(locale).EmailSenderFallback
 	return i18n.Get(locale).EmailSenderFallback
 }
