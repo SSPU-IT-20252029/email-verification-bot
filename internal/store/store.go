@@ -127,6 +127,12 @@ CREATE TABLE IF NOT EXISTS send_log (
 	sent_at    INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_send_log_user_time ON send_log(guild_id, discord_id, sent_at);
+CREATE TABLE IF NOT EXISTS user_locales (
+	guild_id   TEXT NOT NULL,
+	user_id    TEXT NOT NULL,
+	locale     TEXT NOT NULL DEFAULT 'en',
+	PRIMARY KEY (guild_id, user_id)
+);
 `
 	// Enable foreign keys
 	_, err := s.db.Exec("PRAGMA foreign_keys = ON;")
@@ -351,6 +357,26 @@ func (s *Store) LogSend(ctx context.Context, guildID, discordID string, at time.
 func (s *Store) CountSendsSince(ctx context.Context, guildID, discordID string, since time.Time) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM send_log WHERE guild_id = ? AND discord_id = ? AND sent_at >= ?`, guildID, discordID, since.Unix()).Scan(&n)
+		"SELECT COUNT(*) FROM send_log WHERE guild_id = ? AND discord_id = ? AND sent_at >= ?", guildID, discordID, since.Unix()).Scan(&n)
 	return n, err
+}
+
+func (s *Store) GetUserLocale(ctx context.Context, guildID, userID string) (string, bool, error) {
+	var locale string
+	err := s.db.QueryRowContext(ctx,
+		"SELECT locale FROM user_locales WHERE guild_id = ? AND user_id = ?", guildID, userID).Scan(&locale)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return locale, true, nil
+}
+
+func (s *Store) SetUserLocale(ctx context.Context, guildID, userID, locale string) error {
+	_, err := s.db.ExecContext(ctx,
+		"INSERT INTO user_locales (guild_id, user_id, locale) VALUES (?, ?, ?) ON CONFLICT(guild_id, user_id) DO UPDATE SET locale = excluded.locale",
+		guildID, userID, locale)
+	return err
 }
