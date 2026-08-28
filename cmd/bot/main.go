@@ -232,6 +232,7 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 					Description: en.CsvUpload,
 					Options: []*discordgo.ApplicationCommandOption{
 						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: en.CsvFile, Required: true},
+						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: en.CsvFile, Required: true},
 					},
 				},
 				{
