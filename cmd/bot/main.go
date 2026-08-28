@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 
 	"sspu-verifier/internal/config"
+	"sspu-verifier/internal/i18n"
 	"sspu-verifier/internal/mailer"
 	"sspu-verifier/internal/store"
 	"sspu-verifier/internal/verify"
@@ -74,25 +76,67 @@ func main() {
 	log.Println("Shutting down...")
 }
 
+func (b *Bot) getLocale(i *discordgo.InteractionCreate) i18n.Locale {
+	locale, _, err := b.store.GetUserLocale(context.Background(), i.GuildID, i.Member.User.ID)
+	if err != nil || locale == "" {
+		return i18n.LocaleEN
+	}
+	return i18n.ParseLocale(locale)
+}
+
+func (b *Bot) localizeError(i *discordgo.InteractionCreate, err error) string {
+	locale := b.getLocale(i)
+	t := i18n.Get(locale)
+
+	var wce *verify.WrongCodeError
+	if errors.As(err, &wce) {
+		return fmt.Sprintf(t.ErrWrongCodeFmt, wce.Remaining)
+	}
+
+	switch {
+	case errors.Is(err, verify.ErrNotActive):
+		return t.ErrNotActive
+	case errors.Is(err, verify.ErrRateLimited):
+		return t.ErrRateLimited
+	case errors.Is(err, verify.ErrNoPending):
+		return t.ErrNoPending
+	case errors.Is(err, verify.ErrExpired):
+		return t.ErrExpired
+	case errors.Is(err, verify.ErrTooManyAttempts):
+		return t.ErrTooManyAttempts
+	case errors.Is(err, verify.ErrSendFailed):
+		return t.ErrSendFailed
+	case errors.Is(err, verify.ErrEmailAlreadyUsed):
+		return t.ErrEmailAlreadyUsed
+	case errors.Is(err, verify.ErrInvalidDomain):
+		return t.ErrInvalidDomain
+	case errors.Is(err, verify.ErrMissingConfig):
+		return t.ErrMissingConfig
+	}
+
+	return err.Error()
+}
+
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 	log.Printf("Logged in as %v#%v", s.State.User.Username, s.State.User.Discriminator)
 
 	// Register commands globally
+	en := i18n.Get(i18n.LocaleEN)
 	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "setup",
-			Description: "Configure verification parameters for the server",
+			Description: en.SetupDesc,
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "domain",
-					Description: "Allowed email domain (e.g. sspu-opava.cz)",
+					Description: en.SetupDomain,
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "mode",
-					Description: "Verification mode",
+					Description: en.SetupMode,
 					Required:    true,
 					Choices: []*discordgo.ApplicationCommandOptionChoice{
 						{Name: "Regex Matching", Value: "REGEX"},
@@ -102,13 +146,13 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 				{
 					Type:        discordgo.ApplicationCommandOptionChannel,
 					Name:        "channel",
-					Description: "Verification channel",
+					Description: en.SetupChannel,
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "subject",
-					Description: "Email subject",
+					Description: en.SetupSubject,
 					Required:    false,
 				},
 			},
@@ -116,29 +160,29 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 		},
 		{
 			Name:        "regex",
-			Description: "Manage Regex rules",
+			Description: en.RegexDesc,
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "add",
-					Description: "Add a regex rule",
+					Description: en.RegexAdd,
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionString, Name: "pattern", Description: "Regex pattern", Required: true},
-						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: "Target role", Required: true},
-						{Type: discordgo.ApplicationCommandOptionInteger, Name: "priority", Description: "Priority (higher = more important)", Required: false},
+						{Type: discordgo.ApplicationCommandOptionString, Name: "pattern", Description: en.RegexPattern, Required: true},
+						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: en.RegexRole, Required: true},
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "priority", Description: en.RegexPriority, Required: false},
 					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "list",
-					Description: "List all rules",
+					Description: en.RegexList,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "remove",
-					Description: "Remove a rule",
+					Description: en.RegexRemove,
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionInteger, Name: "id", Description: "Rule ID", Required: true},
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "id", Description: en.RegexID, Required: true},
 					},
 				},
 			},
@@ -146,27 +190,43 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 		},
 		{
 			Name:        "csv",
-			Description: "Manage CSV data",
+			Description: en.CsvDesc,
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "upload",
-					Description: "Upload a CSV file (email,class)",
+					Description: en.CsvUpload,
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: "CSV file", Required: true},
+						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: en.CsvFile, Required: true},
 					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "map",
-					Description: "Map a class to a role",
+					Description: en.CsvMap,
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionString, Name: "class", Description: "Class name from CSV", Required: true},
-						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: "Discord role", Required: true},
+						{Type: discordgo.ApplicationCommandOptionString, Name: "class", Description: en.CsvClass, Required: true},
+						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: en.CsvRole, Required: true},
 					},
 				},
 			},
 			DefaultMemberPermissions: func(i int64) *int64 { return &i }(discordgo.PermissionAdministrator),
+		},
+		{
+			Name:        "language",
+			Description: "Change bot language",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "language",
+					Description: en.LanguageDesc,
+					Required:    true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "English", Value: "en"},
+						{Name: "Čeština", Value: "cs"},
+					},
+				},
+			},
 		},
 	}
 
@@ -196,13 +256,16 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 		b.cmdRegex(s, i)
 	case "csv":
 		b.cmdCSV(s, i)
+	case "language":
+		b.cmdLanguage(s, i)
 	}
 }
 
 func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
 	opts := i.ApplicationCommandData().Options
 	var domain, mode, channelID, subject string
-	subject = "Verification code"
+	subject = t.DefaultSubject
 	for _, o := range opts {
 		switch o.Name {
 		case "domain":
@@ -228,15 +291,14 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	if err := b.store.SaveGuildConfig(context.Background(), cfg); err != nil {
-		respondErr(s, i, "Failed to save configuration.")
+		respondErr(s, i, t.FailedSave)
 		return
 	}
 
-	// Send message with button to the channel
 	_, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title:       "School Email Verification",
-			Description: "To gain access, click the button and enter your school email (@" + domain + ").",
+			Title:       t.EmbedTitle,
+			Description: fmt.Sprintf(t.EmbedDescFmt, domain),
 			Color:       0x3b82f6,
 		}},
 		Components: []discordgo.MessageComponent{
@@ -244,7 +306,7 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Components: []discordgo.MessageComponent{
 					discordgo.Button{
 						CustomID: "btn_verify_start",
-						Label:    "Verify",
+						Label:    t.VerifyBtn,
 						Style:    discordgo.PrimaryButton,
 					},
 				},
@@ -253,14 +315,15 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	})
 
 	if err != nil {
-		respondErr(s, i, "Configuration saved, but failed to send the message to the channel.")
+		respondErr(s, i, t.ConfigSavedErr)
 		return
 	}
 
-	respondOK(s, i, "Server successfully configured.")
+	respondOK(s, i, t.ConfigSaved)
 }
 
 func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
 	subcmd := i.ApplicationCommandData().Options[0]
 	switch subcmd.Name {
 	case "add":
@@ -283,19 +346,19 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			Priority: priority,
 		})
 		if err != nil {
-			respondErr(s, i, "Failed to add rule.")
+			respondErr(s, i, t.FailedSave)
 			return
 		}
-		respondOK(s, i, "Rule added.")
+		respondOK(s, i, t.RuleAdded)
 
 	case "list":
 		rules, err := b.store.ListRegexRules(context.Background(), i.GuildID)
 		if err != nil {
-			respondErr(s, i, "Failed to load rules.")
+			respondErr(s, i, t.FailedLoadRules)
 			return
 		}
 		if len(rules) == 0 {
-			respondOK(s, i, "No rules are set.")
+			respondOK(s, i, t.NoRules)
 			return
 		}
 		var msg strings.Builder
@@ -307,14 +370,15 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	case "remove":
 		id := int(subcmd.Options[0].IntValue())
 		if err := b.store.RemoveRegexRule(context.Background(), id); err != nil {
-			respondErr(s, i, "Failed to delete rule.")
+			respondErr(s, i, t.FailedDelete)
 			return
 		}
-		respondOK(s, i, "Rule deleted.")
+		respondOK(s, i, t.RuleDeleted)
 	}
 }
 
 func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
 	subcmd := i.ApplicationCommandData().Options[0]
 	switch subcmd.Name {
 	case "upload":
@@ -323,7 +387,7 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 		resp, err := http.Get(att.URL)
 		if err != nil || resp.StatusCode != http.StatusOK {
-			respondErr(s, i, "Error downloading file.")
+			respondErr(s, i, t.ErrorDownload)
 			return
 		}
 		defer resp.Body.Close()
@@ -331,7 +395,7 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		reader := csv.NewReader(resp.Body)
 		records, err := reader.ReadAll()
 		if err != nil {
-			respondErr(s, i, "Invalid CSV format.")
+			respondErr(s, i, t.InvalidCSV)
 			return
 		}
 
@@ -348,7 +412,7 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				}
 			}
 		}
-		respondOK(s, i, fmt.Sprintf("Uploaded %d emails into the database.", count))
+		respondOK(s, i, fmt.Sprintf(t.UploadedEmailsFmt, count))
 
 	case "map":
 		var class, roleID string
@@ -361,29 +425,30 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 		err := b.store.MapCSVClass(context.Background(), i.GuildID, class, roleID)
 		if err != nil {
-			respondErr(s, i, "Failed to save mapping.")
+			respondErr(s, i, t.FailedMap)
 			return
 		}
-		respondOK(s, i, fmt.Sprintf("Class `%s` mapped to role <@&%s>.", class, roleID))
+		respondOK(s, i, fmt.Sprintf(t.ClassMappedFmt, class, roleID))
 	}
 }
 
 func (b *Bot) handleComponent(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
 	switch i.MessageComponentData().CustomID {
 	case "btn_verify_start":
 		err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseModal,
 			Data: &discordgo.InteractionResponseData{
 				CustomID: "modal_email",
-				Title:    "School Email Verification",
+				Title:    t.VerifyModalTitle,
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
 							discordgo.TextInput{
 								CustomID:    "input_email",
-								Label:       "Your email",
+								Label:       t.YourEmail,
 								Style:       discordgo.TextInputShort,
-								Placeholder: "student@domain.com",
+								Placeholder: t.EmailPlaceholder,
 								Required:    true,
 							},
 						},
@@ -399,15 +464,15 @@ func (b *Bot) handleComponent(s *discordgo.Session, i *discordgo.InteractionCrea
 			Type: discordgo.InteractionResponseModal,
 			Data: &discordgo.InteractionResponseData{
 				CustomID: "modal_code",
-				Title:    "Enter code from email",
+				Title:    t.CodeModalTitle,
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
 							discordgo.TextInput{
 								CustomID:    "input_code",
-								Label:       "Verification code",
+								Label:       t.CodeLabel,
 								Style:       discordgo.TextInputShort,
-								Placeholder: "123456",
+								Placeholder: t.CodePlaceholder,
 								Required:    true,
 								MinLength:   6,
 								MaxLength:   6,
@@ -424,28 +489,33 @@ func (b *Bot) handleComponent(s *discordgo.Session, i *discordgo.InteractionCrea
 }
 
 func (b *Bot) handleModal(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
 	data := i.ModalSubmitData()
 
 	switch data.CustomID {
 	case "modal_email":
 		email := data.Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
-		err := b.verify.Start(context.Background(), i.GuildID, i.Member.User.ID, email)
+		userLocale := b.getLocale(i)
+		if l, _, err := b.store.GetUserLocale(context.Background(), i.GuildID, i.Member.User.ID); err == nil && l != "" {
+			userLocale = i18n.ParseLocale(l)
+		}
+		err := b.verify.Start(context.Background(), i.GuildID, i.Member.User.ID, email, userLocale)
 		if err != nil {
-			respondErr(s, i, "Error: "+err.Error())
+			respondErr(s, i, fmt.Sprintf(t.ErrEmailFmt, b.localizeError(i, err)))
 			return
 		}
 
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: "Code sent to " + email + ". Check your inbox and click the button below to enter it.",
+				Content: fmt.Sprintf(t.CodeSentFmt, email),
 				Flags:   discordgo.MessageFlagsEphemeral,
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
 							discordgo.Button{
 								CustomID: "btn_enter_code",
-								Label:    "Enter Code",
+								Label:    t.EnterCodeBtn,
 								Style:    discordgo.SuccessButton,
 							},
 						},
@@ -459,20 +529,46 @@ func (b *Bot) handleModal(s *discordgo.Session, i *discordgo.InteractionCreate) 
 
 	case "modal_code":
 		code := data.Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
+		userLocale := b.getLocale(i)
+		if l, _, err := b.store.GetUserLocale(context.Background(), i.GuildID, i.Member.User.ID); err == nil && l != "" {
+			userLocale = i18n.ParseLocale(l)
+		}
 		roleID, err := b.verify.Confirm(context.Background(), i.GuildID, i.Member.User.ID, code)
 		if err != nil {
-			respondErr(s, i, "Verification failed: "+err.Error())
+			respondErr(s, i, b.localizeError(i, err))
 			return
 		}
 
 		err = s.GuildMemberRoleAdd(i.GuildID, i.Member.User.ID, roleID)
 		if err != nil {
-			respondErr(s, i, "Verification successful, but failed to assign the role. Contact an administrator.")
+			respondErr(s, i, i18n.Get(userLocale).ErrSendFailed)
 			return
 		}
 
-		respondOK(s, i, "Verification successful! The role has been assigned.")
+		respondOK(s, i, i18n.Get(userLocale).VerifySuccess)
 	}
+}
+
+func (b *Bot) cmdLanguage(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
+	var localeStr string
+	for _, o := range i.ApplicationCommandData().Options {
+		if o.Name == "language" {
+			localeStr = o.StringValue()
+		}
+	}
+	locale := i18n.ParseLocale(localeStr)
+	if err := b.store.SetUserLocale(context.Background(), i.GuildID, i.Member.User.ID, string(locale)); err != nil {
+		respondErr(s, i, t.FailedSave)
+		return
+	}
+	langName := localeStr
+	if locale == i18n.LocaleEN {
+		langName = "English"
+	} else if locale == i18n.LocaleCS {
+		langName = "Čeština"
+	}
+	respondOK(s, i, fmt.Sprintf(t.LanguageSetFmt, langName))
 }
 
 func respondOK(s *discordgo.Session, i *discordgo.InteractionCreate, msg string) {
