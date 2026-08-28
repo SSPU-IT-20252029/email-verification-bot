@@ -23,7 +23,7 @@ import (
 	"sspu-verifier/internal/verify"
 )
 
-var configPath = flag.String("config", "config.yml", "Cesta ke konfiguračnímu souboru")
+var configPath = flag.String("config", "config.yml", "Path to configuration file")
 
 type Bot struct {
 	session *discordgo.Session
@@ -36,12 +36,12 @@ func main() {
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("Chyba načítání konfigurace: %v", err)
+		log.Fatalf("Error loading config: %v", err)
 	}
 
 	st, err := store.Open(cfg.Storage.DSN)
 	if err != nil {
-		log.Fatalf("Chyba načítání databáze: %v", err)
+		log.Fatalf("Error loading database: %v", err)
 	}
 	defer st.Close()
 
@@ -50,7 +50,7 @@ func main() {
 
 	dg, err := discordgo.New("Bot " + cfg.Discord.Token)
 	if err != nil {
-		log.Fatalf("Chyba vytváření Discord session: %v", err)
+		log.Fatalf("Error creating Discord session: %v", err)
 	}
 
 	bot := &Bot{
@@ -65,36 +65,36 @@ func main() {
 	dg.Identify.Intents = discordgo.IntentsGuilds | discordgo.IntentsGuildMembers
 
 	if err := dg.Open(); err != nil {
-		log.Fatalf("Chyba připojení k Discordu: %v", err)
+		log.Fatalf("Error connecting to Discord: %v", err)
 	}
 	defer dg.Close()
 
-	log.Println("Bot běží. Ukonči pomocí CTRL-C.")
+	log.Println("Bot is running. Press CTRL-C to exit.")
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
-	log.Println("Ukončuji...")
+	log.Println("Shutting down...")
 }
 
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
-	log.Printf("Přihlášen jako %v#%v", s.State.User.Username, s.State.User.Discriminator)
+	log.Printf("Logged in as %v#%v", s.State.User.Username, s.State.User.Discriminator)
 
 	// Register commands globally
 	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "setup",
-			Description: "Nastaví ověřovací parametry pro server",
+			Description: "Configure verification parameters for the server",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "domain",
-					Description: "Povolená e-mailová doména (např. sspu-opava.cz)",
+					Description: "Allowed email domain (e.g. sspu-opava.cz)",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "mode",
-					Description: "Režim ověřování",
+					Description: "Verification mode",
 					Required:    true,
 					Choices: []*discordgo.ApplicationCommandOptionChoice{
 						{Name: "Regex Matching", Value: "REGEX"},
@@ -104,13 +104,13 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 				{
 					Type:        discordgo.ApplicationCommandOptionChannel,
 					Name:        "channel",
-					Description: "Ověřovací kanál",
+					Description: "Verification channel",
 					Required:    true,
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionString,
 					Name:        "subject",
-					Description: "Předmět e-mailu",
+					Description: "Email subject",
 					Required:    false,
 				},
 			},
@@ -118,29 +118,29 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 		},
 		{
 			Name:        "regex",
-			Description: "Správa Regex pravidel",
+			Description: "Manage Regex rules",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "add",
-					Description: "Přidá regex pravidlo",
+					Description: "Add a regex rule",
 					Options: []*discordgo.ApplicationCommandOption{
 						{Type: discordgo.ApplicationCommandOptionString, Name: "pattern", Description: "Regex pattern", Required: true},
-						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: "Cílová role", Required: true},
-						{Type: discordgo.ApplicationCommandOptionInteger, Name: "priority", Description: "Priorita (vyšší číslo = vyšší priorita)", Required: false},
+						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: "Target role", Required: true},
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "priority", Description: "Priority (higher = more important)", Required: false},
 					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "list",
-					Description: "Vypíše všechna pravidla",
+					Description: "List all rules",
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "remove",
-					Description: "Smaže pravidlo",
+					Description: "Remove a rule",
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionInteger, Name: "id", Description: "ID pravidla", Required: true},
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "id", Description: "Rule ID", Required: true},
 					},
 				},
 			},
@@ -148,22 +148,22 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 		},
 		{
 			Name:        "csv",
-			Description: "Správa CSV dat",
+			Description: "Manage CSV data",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "upload",
-					Description: "Nahraje CSV soubor (e-mail,třída)",
+					Description: "Upload a CSV file (email,class)",
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: "CSV soubor", Required: true},
+						{Type: discordgo.ApplicationCommandOptionAttachment, Name: "file", Description: "CSV file", Required: true},
 					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "map",
-					Description: "Namapuje třídu na roli",
+					Description: "Map a class to a role",
 					Options: []*discordgo.ApplicationCommandOption{
-						{Type: discordgo.ApplicationCommandOptionString, Name: "class", Description: "Název třídy z CSV", Required: true},
+						{Type: discordgo.ApplicationCommandOptionString, Name: "class", Description: "Class name from CSV", Required: true},
 						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: "Discord role", Required: true},
 					},
 				},
@@ -174,7 +174,7 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 
 	_, err := s.ApplicationCommandBulkOverwrite(s.State.User.ID, "", commands)
 	if err != nil {
-		log.Printf("Chyba registrace příkazů: %v", err)
+		log.Printf("Error registering commands: %v", err)
 	}
 }
 
@@ -204,7 +204,7 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	opts := i.ApplicationCommandData().Options
 	var domain, mode, channelID, subject string
-	subject = "Ověřovací kód"
+	subject = "Verification code"
 	for _, o := range opts {
 		switch o.Name {
 		case "domain":
@@ -230,15 +230,15 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	if err := b.store.SaveGuildConfig(context.Background(), cfg); err != nil {
-		respondErr(s, i, "Chyba uložení konfigurace.")
+		respondErr(s, i, "Failed to save configuration.")
 		return
 	}
 
 	// Send message with button to the channel
 	_, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Embeds: []*discordgo.MessageEmbed{{
-			Title:       "Ověření školního e-mailu",
-			Description: "Pro získání přístupu klikni na tlačítko a zadej svůj školní e-mail (@" + domain + ").",
+			Title:       "School Email Verification",
+			Description: "To gain access, click the button and enter your school email (@" + domain + ").",
 			Color:       0x3b82f6,
 		}},
 		Components: []discordgo.MessageComponent{
@@ -246,7 +246,7 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Components: []discordgo.MessageComponent{
 					discordgo.Button{
 						CustomID: "btn_verify_start",
-						Label:    "Ověřit se",
+						Label:    "Verify",
 						Style:    discordgo.PrimaryButton,
 					},
 				},
@@ -255,11 +255,11 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	})
 
 	if err != nil {
-		respondErr(s, i, "Konfigurace uložena, ale nepodařilo se poslat zprávu do kanálu.")
+		respondErr(s, i, "Configuration saved, but failed to send the message to the channel.")
 		return
 	}
 
-	respondOK(s, i, "Server úspěšně nastaven.")
+	respondOK(s, i, "Server successfully configured.")
 }
 
 func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -285,34 +285,34 @@ func (b *Bot) cmdRegex(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			Priority: priority,
 		})
 		if err != nil {
-			respondErr(s, i, "Nepodařilo se přidat pravidlo.")
+			respondErr(s, i, "Failed to add rule.")
 			return
 		}
-		respondOK(s, i, "Pravidlo přidáno.")
+		respondOK(s, i, "Rule added.")
 
 	case "list":
 		rules, err := b.store.ListRegexRules(context.Background(), i.GuildID)
 		if err != nil {
-			respondErr(s, i, "Nepodařilo se načíst pravidla.")
+			respondErr(s, i, "Failed to load rules.")
 			return
 		}
 		if len(rules) == 0 {
-			respondOK(s, i, "Žádná pravidla nejsou nastavena.")
+			respondOK(s, i, "No rules are set.")
 			return
 		}
 		var msg strings.Builder
 		for _, r := range rules {
-			msg.WriteString(fmt.Sprintf("ID: %d | Pattern: `%s` | Role: <@&%s> | Priorita: %d\n", r.ID, r.Pattern, r.RoleID, r.Priority))
+			msg.WriteString(fmt.Sprintf("ID: %d | Pattern: `%s` | Role: <@&%s> | Priority: %d\n", r.ID, r.Pattern, r.RoleID, r.Priority))
 		}
 		respondOK(s, i, msg.String())
 
 	case "remove":
 		id := int(subcmd.Options[0].IntValue())
 		if err := b.store.RemoveRegexRule(context.Background(), id); err != nil {
-			respondErr(s, i, "Nepodařilo se smazat pravidlo.")
+			respondErr(s, i, "Failed to delete rule.")
 			return
 		}
-		respondOK(s, i, "Pravidlo smazáno.")
+		respondOK(s, i, "Rule deleted.")
 	}
 }
 
@@ -325,7 +325,7 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 		resp, err := http.Get(att.URL)
 		if err != nil || resp.StatusCode != http.StatusOK {
-			respondErr(s, i, "Chyba při stahování souboru.")
+			respondErr(s, i, "Error downloading file.")
 			return
 		}
 		defer resp.Body.Close()
@@ -333,7 +333,7 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		reader := csv.NewReader(resp.Body)
 		records, err := reader.ReadAll()
 		if err != nil {
-			respondErr(s, i, "Neplatný formát CSV.")
+			respondErr(s, i, "Invalid CSV format.")
 			return
 		}
 
@@ -350,7 +350,7 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				}
 			}
 		}
-		respondOK(s, i, fmt.Sprintf("Nahráno %d e-mailů do databáze.", count))
+		respondOK(s, i, fmt.Sprintf("Uploaded %d emails into the database.", count))
 
 	case "map":
 		var class, roleID string
@@ -363,10 +363,10 @@ func (b *Bot) cmdCSV(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		}
 		err := b.store.MapCSVClass(context.Background(), i.GuildID, class, roleID)
 		if err != nil {
-			respondErr(s, i, "Nepodařilo se uložit mapování.")
+			respondErr(s, i, "Failed to save mapping.")
 			return
 		}
-		respondOK(s, i, fmt.Sprintf("Třída `%s` byla namapována na roli <@&%s>.", class, roleID))
+		respondOK(s, i, fmt.Sprintf("Class `%s` mapped to role <@&%s>.", class, roleID))
 	}
 }
 
@@ -377,15 +377,15 @@ func (b *Bot) handleComponent(s *discordgo.Session, i *discordgo.InteractionCrea
 			Type: discordgo.InteractionResponseModal,
 			Data: &discordgo.InteractionResponseData{
 				CustomID: "modal_email",
-				Title:    "Ověření školního e-mailu",
+				Title:    "School Email Verification",
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
 							discordgo.TextInput{
 								CustomID:    "input_email",
-								Label:       "Tvůj e-mail",
+								Label:       "Your email",
 								Style:       discordgo.TextInputShort,
-								Placeholder: "jmeno@sspu-opava.cz",
+								Placeholder: "student@domain.com",
 								Required:    true,
 							},
 						},
@@ -401,13 +401,13 @@ func (b *Bot) handleComponent(s *discordgo.Session, i *discordgo.InteractionCrea
 			Type: discordgo.InteractionResponseModal,
 			Data: &discordgo.InteractionResponseData{
 				CustomID: "modal_code",
-				Title:    "Zadej kód z e-mailu",
+				Title:    "Enter code from email",
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
 							discordgo.TextInput{
 								CustomID:    "input_code",
-								Label:       "Ověřovací kód",
+								Label:       "Verification code",
 								Style:       discordgo.TextInputShort,
 								Placeholder: "123456",
 								Required:    true,
@@ -433,21 +433,21 @@ func (b *Bot) handleModal(s *discordgo.Session, i *discordgo.InteractionCreate) 
 		email := data.Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 		err := b.verify.Start(context.Background(), i.GuildID, i.Member.User.ID, email)
 		if err != nil {
-			respondErr(s, i, "Chyba: "+err.Error())
+			respondErr(s, i, "Error: "+err.Error())
 			return
 		}
 
 		err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: "Kód byl odeslán na " + email + ". Zkontroluj si poštu a klikni na tlačítko níže pro jeho zadání.",
+				Content: "Code sent to " + email + ". Check your inbox and click the button below to enter it.",
 				Flags:   discordgo.MessageFlagsEphemeral,
 				Components: []discordgo.MessageComponent{
 					discordgo.ActionsRow{
 						Components: []discordgo.MessageComponent{
 							discordgo.Button{
 								CustomID: "btn_enter_code",
-								Label:    "Zadat kód",
+								Label:    "Enter Code",
 								Style:    discordgo.SuccessButton,
 							},
 						},
@@ -463,17 +463,17 @@ func (b *Bot) handleModal(s *discordgo.Session, i *discordgo.InteractionCreate) 
 		code := data.Components[0].(*discordgo.ActionsRow).Components[0].(*discordgo.TextInput).Value
 		roleID, err := b.verify.Confirm(context.Background(), i.GuildID, i.Member.User.ID, code)
 		if err != nil {
-			respondErr(s, i, "Ověření selhalo: "+err.Error())
+			respondErr(s, i, "Verification failed: "+err.Error())
 			return
 		}
 
 		err = s.GuildMemberRoleAdd(i.GuildID, i.Member.User.ID, roleID)
 		if err != nil {
-			respondErr(s, i, "Ověření proběhlo úspěšně, ale nepodařilo se přidat roli. Kontaktuj administrátora.")
+			respondErr(s, i, "Verification successful, but failed to assign the role. Contact an administrator.")
 			return
 		}
 
-		respondOK(s, i, "Ověření úspěšné! Role ti byla přidělena.")
+		respondOK(s, i, "Verification successful! The role has been assigned.")
 	}
 }
 
@@ -496,3 +496,4 @@ func respondErr(s *discordgo.Session, i *discordgo.InteractionCreate, msg string
 		},
 	})
 }
+

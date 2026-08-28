@@ -32,7 +32,7 @@ var envRe = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 func Load(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("čtení konfigurace: %w", err)
+		return nil, fmt.Errorf("reading configuration: %w", err)
 	}
 	expanded := envRe.ReplaceAllFunc(raw, func(m []byte) []byte {
 		name := envRe.FindSubmatch(m)[1]
@@ -40,7 +40,7 @@ func Load(path string) (*Config, error) {
 	})
 	var cfg Config
 	if err := yaml.Unmarshal(expanded, &cfg); err != nil {
-		return nil, fmt.Errorf("parsování konfigurace: %w", err)
+		return nil, fmt.Errorf("parsing configuration: %w", err)
 	}
 	applyDefaults(&cfg)
 	if err := validate(&cfg); err != nil {
@@ -57,13 +57,13 @@ func applyDefaults(cfg *Config) {
 
 func validate(cfg *Config) error {
 	if cfg.Discord.Token == "" {
-		return fmt.Errorf("discord.token je povinný")
+		return fmt.Errorf("discord.token is required")
 	}
 	if cfg.Email.APIKey == "" {
-		return fmt.Errorf("email.api_key je povinný")
+		return fmt.Errorf("email.api_key is required")
 	}
 	if cfg.Email.From == "" {
-		return fmt.Errorf("email.from je povinný")
+		return fmt.Errorf("email.from is required")
 	}
 	return nil
 }

@@ -17,15 +17,15 @@ import (
 )
 
 var (
-	ErrNotActive        = errors.New("verify: žádné pravidlo neodpovídá tomuto e-mailu")
-	ErrRateLimited      = errors.New("verify: překročen limit odeslaných kódů, zkus to později")
-	ErrNoPending        = errors.New("verify: žádný čekající kód, použij nejdřív /verify")
-	ErrExpired          = errors.New("verify: kód vypršel")
-	ErrTooManyAttempts  = errors.New("verify: příliš mnoho pokusů")
-	ErrSendFailed       = errors.New("verify: odeslání e-mailu selhalo")
-	ErrEmailAlreadyUsed = errors.New("verify: e-mail je přiřazen k jinému uživateli")
-	ErrInvalidDomain    = errors.New("verify: neplatná doména e-mailu pro tento server")
-	ErrMissingConfig    = errors.New("verify: tento server ještě není plně nastaven")
+	ErrNotActive        = errors.New("verify: no rule matches this email")
+	ErrRateLimited      = errors.New("verify: verification limit exceeded, please try again later")
+	ErrNoPending        = errors.New("verify: no pending code found, please use /verify first")
+	ErrExpired          = errors.New("verify: code expired")
+	ErrTooManyAttempts  = errors.New("verify: too many attempts")
+	ErrSendFailed       = errors.New("verify: failed to send email")
+	ErrEmailAlreadyUsed = errors.New("verify: email is already bound to another user")
+	ErrInvalidDomain    = errors.New("verify: invalid email domain for this server")
+	ErrMissingConfig    = errors.New("verify: this server is not fully configured yet")
 )
 
 type WrongCodeError struct {
@@ -33,7 +33,7 @@ type WrongCodeError struct {
 }
 
 func (e *WrongCodeError) Error() string {
-	return "verify: nesprávný kód"
+	return "verify: wrong code"
 }
 
 type Mailer interface {
@@ -192,7 +192,7 @@ func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) 
 func generateCode() (string, error) {
 	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
 	if err != nil {
-		return "", fmt.Errorf("generování kódu: %w", err)
+		return "", fmt.Errorf("generating code: %w", err)
 	}
 	return fmt.Sprintf("%06d", n.Int64()), nil
 }

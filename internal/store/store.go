@@ -54,12 +54,12 @@ type Store struct {
 func Open(dsn string) (*Store, error) {
 	if dir := filepath.Dir(dsn); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, fmt.Errorf("vytváření adresáře databáze: %w", err)
+			return nil, fmt.Errorf("creating database directory: %w", err)
 		}
 	}
 	db, err := sql.Open("sqlite", dsn+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
 	if err != nil {
-		return nil, fmt.Errorf("otevírání databáze: %w", err)
+		return nil, fmt.Errorf("opening database: %w", err)
 	}
 	db.SetMaxOpenConns(1)
 	s := &Store{db: db}
@@ -135,7 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_send_log_user_time ON send_log(guild_id, discord_
 	}
 	_, err = s.db.Exec(schema)
 	if err != nil {
-		return fmt.Errorf("migrace databáze: %w", err)
+		return fmt.Errorf("database migration: %w", err)
 	}
 	return nil
 }

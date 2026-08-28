@@ -1,4 +1,4 @@
-// Package mailer odesílá ověřovací kódy e-mailem přes Resend API.
+// Package mailer sends verification codes via email using the Resend API.
 package mailer
 
 import (
@@ -36,36 +36,36 @@ func (m *Mailer) SendCode(to, subject, code string, ttl time.Duration) error {
 		Html:    m.buildHTML(code, ttl),
 	})
 	if err != nil {
-		return fmt.Errorf("odeslání e-mailu přes Resend: %w", err)
+		return fmt.Errorf("sending email via Resend: %w", err)
 	}
 	return nil
 }
 
 func (m *Mailer) buildText(code string, ttl time.Duration) string {
 	return strings.Join([]string{
-		"Ahoj,",
+		"Hello,",
 		"",
-		"tvůj ověřovací kód pro Discord je:",
+		"Your verification code for Discord is:",
 		"",
 		"    " + code,
 		"",
-		fmt.Sprintf("Kód je platný %d minut. Pokud jsi o ověření nepožádal(a), tento e-mail ignoruj.", int(ttl.Minutes())),
+		fmt.Sprintf("The code is valid for %d minutes. If you did not request this, please ignore this email.", int(ttl.Minutes())),
 		"",
 		senderName(m.cfg.From),
 	}, "\r\n")
 }
 
 var htmlTpl = template.Must(template.New("code").Parse(`<!doctype html>
-<html lang="cs">
+<html lang="en">
 <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
 <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background-color:#ffffff;border-radius:12px;">
 <tr><td colspan="3" style="height:32px;"></td></tr>
-<tr><td style="width:32px;"></td><td style="font-size:20px;font-weight:700;color:#111827;">Ověření Discordu</td><td style="width:32px;"></td></tr>
+<tr><td style="width:32px;"></td><td style="font-size:20px;font-weight:700;color:#111827;">Discord Verification</td><td style="width:32px;"></td></tr>
 <tr><td colspan="3" style="height:8px;"></td></tr>
-<tr><td style="width:32px;"></td><td style="font-size:15px;line-height:22px;color:#374151;">Ahoj,<br>tvůj ověřovací kód pro Discord je:</td><td style="width:32px;"></td></tr>
+<tr><td style="width:32px;"></td><td style="font-size:15px;line-height:22px;color:#374151;">Hello,<br>Your verification code for Discord is:</td><td style="width:32px;"></td></tr>
 <tr><td style="width:32px;"></td><td align="center" style="padding:24px 0;"><div style="display:inline-block;background-color:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:14px 28px;font-family:'SF Mono',Consolas,Menlo,monospace;font-size:34px;font-weight:700;letter-spacing:10px;text-indent:10px;color:#1d4ed8;">{{.Code}}</div></td><td style="width:32px;"></td></tr>
-<tr><td style="width:32px;"></td><td style="font-size:13px;line-height:20px;color:#6b7280;">Kód je platný {{.Minutes}} min. Pokud jsi o ověření nepožádal(a), tento e-mail ignoruj.</td><td style="width:32px;"></td></tr>
+<tr><td style="width:32px;"></td><td style="font-size:13px;line-height:20px;color:#6b7280;">The code is valid for {{.Minutes}} min. If you did not request this, please ignore this email.</td><td style="width:32px;"></td></tr>
 <tr><td colspan="3" style="height:24px;"></td></tr>
 <tr><td style="width:32px;"></td><td style="font-size:13px;color:#9ca3af;">{{.Sender}}</td><td style="width:32px;"></td></tr>
 <tr><td colspan="3" style="height:32px;"></td></tr>

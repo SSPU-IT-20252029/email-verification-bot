@@ -3,7 +3,7 @@ discord:
 
 email:
   api_key: ${RESEND_API_KEY}
-  from: "Discord bot <discord-bot@tvojedomena.cz>"
+  from: "Discord bot <discord-bot@yourdomain.com>"
 
 storage:
   dsn: "./data/verifier.db"

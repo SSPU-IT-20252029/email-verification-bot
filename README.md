@@ -1,16 +1,16 @@
 # Lightweight Multi-Guild Verification Bot
 
-Discord bot pro ověřování členů pomocí e-mailu a automatické přidělování rolí podle flexibilních pravidel. Podporuje více serverů (multi-guild), Regex matching i nahrávání mapovacích CSV souborů.
+A Discord bot for verifying members via email and automatically assigning roles based on flexible rules. It supports multiple servers (multi-guild), Regex matching, and CSV mapping uploads.
 
-## Požadavky
+## Requirements
 
 - **Go** 1.27+
-- **Discord bot** — token z [Developer Portalu](https://discord.com/developers/applications), povolený **SERVER MEMBERS INTENT**, pozvánka s oprávněním `Manage Roles` a scope `bot` + `applications.commands`; botova role musí být **nad** všemi přidělovanými rolemi.
-- **Resend** — API klíč z [resend.com](https://resend.com) a ověřená odesílací doména.
+- **Discord Bot** — A token from the [Developer Portal](https://discord.com/developers/applications), with the **SERVER MEMBERS INTENT** enabled. Use an invite with `Manage Roles` permission and `bot` + `applications.commands` scopes. The bot's role must be placed **above** all the roles it needs to assign.
+- **Resend** — An API key from [resend.com](https://resend.com) and a verified sender domain.
 
-## Konfigurace (Globální)
+## Configuration (Global)
 
-Zkopíruj `config.example.yml` na `config.yml` a vyplň:
+Copy `config.example.yml` to `config.yml` and fill it out:
 
 ```yaml
 discord:
@@ -18,37 +18,41 @@ discord:
 
 email:
   api_key: ${RESEND_API_KEY}
-  from: "Discord bot <discord-bot@tvojedomena.cz>"
+  from: "Discord bot <discord-bot@yourdomain.com>"
 
 storage:
   dsn: "./data/verifier.db"
 ```
 
-## Konfigurace (Na serveru / Slash Commands)
+## Configuration (Per-Server / Slash Commands)
 
-Bot se po spuštění plně nastavuje přímo z Discordu pomocí příkazů (přístupné jen adminům):
+Once running, the bot is fully configured directly from Discord using slash commands (accessible only to administrators):
 
-- `/setup` - Inicializuje server, nastaví povolenou doménu, režim (REGEX nebo CSV) a vygeneruje tlačítko "Ověřit se" do zvoleného kanálu.
-- `/regex add/remove/list` - V režimu REGEX umožňuje nastavit pravidla (např. e-mail `.*2025@...` -> dostane konkrétní roli).
-- `/csv upload` - V režimu CSV nahraje do databáze `.csv` soubor se sloupci `email` a `trida` (nebo jiný název).
-- `/csv map` - Přiřadí konkrétní `trida` z CSV na příslušnou Discord roli.
+- `/setup` - Initializes the server, sets the allowed email domain, mode (REGEX or CSV), and generates a "Verify" button in the chosen channel.
+- `/regex add/remove/list` - In REGEX mode, this allows you to set rules (e.g., email `.*2025@...` -> gets a specific role).
+- `/csv upload` - In CSV mode, uploads a `.csv` file with `email` and `class` (or any other identifier) columns to the database.
+- `/csv map` - Maps a specific `class` from the CSV to the corresponding Discord role.
 
-## Jak funguje workflow
+## Workflow
 
-1. Uživatel klikne na tlačítko "Ověřit se" (vytvořené přes `/setup`).
-2. Otevře se vyskakovací Modal window, kam zadá svůj e-mail.
-3. Bot zkontroluje nastavenou doménu, vygeneruje kód a pošle ho e-mailem.
-4. Bot pošle uživateli dočasnou (ephemeral) zprávu s tlačítkem "Zadat kód".
-5. Uživatel zadá kód do dalšího Modalu.
-6. Bot najde roli buď přes nastavený **Regex**, nebo **CSV Mapování**, a roli přidělí.
+1. A user clicks the "Verify" button (created via `/setup`).
+2. A Modal window pops up, prompting the user for their email.
+3. The bot checks the configured domain, generates a code, and sends it via email.
+4. The bot sends an ephemeral message with an "Enter Code" button to the user.
+5. The user enters the code into a second Modal.
+6. The bot finds the matching role using either the configured **Regex** or **CSV Mapping** and assigns it.
 
-## Build a spuštění (Docker / Lokálně)
+## Build and Run (Docker / Local)
 
-Lokální spuštění:
-```
+Running locally:
+```bash
 go build ./cmd/bot
 ./bot -config config.yml
 ```
-*(Tokeny lze předat i jako proměnné prostředí: `DISCORD_TOKEN=... RESEND_API_KEY=...`)*
+*(Tokens can also be passed as environment variables: `DISCORD_TOKEN=... RESEND_API_KEY=...`)*
 
-Bot je navržen tak, aby běžel v 1 Docker kontejneru a databáze (`.db` soubor) by měla být namountovaná ve volume (`/data`). Paměťový otisk je optimalizován do 50 MB RAM.
+The bot is designed to run in a single Docker container with the database (`.db` file) mounted in a volume (`/data`). The memory footprint is optimized to stay under 50 MB RAM.
+
+To run via Docker Compose:
+1. Create a `.env` file with `DISCORD_TOKEN` and `RESEND_API_KEY`.
+2. Run `docker-compose up -d --build`.
