@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: sspu-email-bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Tokeny můžeš dát sem, nebo je načíst z .env souboru
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - RESEND_API_KEY=${RESEND_API_KEY}
