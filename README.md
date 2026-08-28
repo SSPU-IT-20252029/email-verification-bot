@@ -1,6 +1,16 @@
 # Lightweight Multi-Guild Verification Bot
 
-A Discord bot for verifying members via email and automatically assigning roles based on flexible rules. It supports multiple servers (multi-guild), Regex matching, and CSV mapping uploads.
+A Discord bot for verifying members via email and automatically assigning roles based on flexible rules. It supports multiple servers (multi-guild), Regex matching, CSV mapping uploads, bilingual UI (EN/CS), and configurable rate limits.
+
+## Features
+
+- **Multi-Guild**: Each server has its own configuration, rules, and CSV data.
+- **Verification Flow**: Button → Modal (email) → Email code → Modal (code) → Role assignment.
+- **Regex Mode**: One regex rule per guild, ordered by priority. Supports capture group → role mappings for advanced use cases.
+- **CSV Mode**: Upload `.csv` with `email,class` columns and map classes to roles.
+- **Bilingual**: Built-in English and Czech translations. Users can switch language with `/language`.
+- **Rate Limits**: Configurable per-server email rate limits (`/ratelimit`).
+- **Debug Mode**: Run with `-debug` for verbose gateway and interaction logging.
 
 ## Requirements
 
@@ -24,14 +34,30 @@ storage:
   dsn: "./data/verifier.db"
 ```
 
-## Configuration (Per-Server / Slash Commands)
+## Commands
 
-Once running, the bot is fully configured directly from Discord using slash commands (accessible only to administrators):
-
+### Administrator
 - `/setup` - Initializes the server, sets the allowed email domain, mode (REGEX or CSV), and generates a "Verify" button in the chosen channel.
-- `/regex add/remove/list` - In REGEX mode, this allows you to set rules (e.g., email `.*2025@...` -> gets a specific role).
-- `/csv upload` - In CSV mode, uploads a `.csv` file with `email` and `class` (or any other identifier) columns to the database.
-- `/csv map` - Maps a specific `class` from the CSV to the corresponding Discord role.
+- `/regex add/remove/list` - Manage regex rules. `add` supports optional `group_index` for capture group mappings.
+- `/regex group add/list/remove` - Map specific capture group values to roles (requires `group_index` > 0 on the parent rule).
+- `/csv upload` - Uploads a `.csv` file with `email` and `class` columns.
+- `/csv map` - Maps a specific `class` from the CSV to a Discord role.
+- `/ratelimit count:<1-3> window:<1-60>` - Sets the maximum number of verification emails per time window (in minutes). Default: 3 emails / 15 minutes.
+
+### User
+- `/language <en|cs>` - Switch bot language (English or Czech).
+- `/help` - Shows an overview of all available commands.
+
+## Regex Groups Example
+
+Create one regex with capture groups and map each group value to a different role:
+
+```
+/regex add pattern:"(?i)^(a|b|c|d)(21|22|23|24)\d{2}@" group_index:1
+/regex group add rule:1 value:a role:role_a
+/regex group add rule:1 value:b role:role_b
+/regex group add rule:1 value:c role:role_c
+```
 
 ## Workflow
 
@@ -40,7 +66,7 @@ Once running, the bot is fully configured directly from Discord using slash comm
 3. The bot checks the configured domain, generates a code, and sends it via email.
 4. The bot sends an ephemeral message with an "Enter Code" button to the user.
 5. The user enters the code into a second Modal.
-6. The bot finds the matching role using either the configured **Regex** or **CSV Mapping** and assigns it.
+6. The bot finds the matching role using either the configured **Regex** (including group mappings) or **CSV Mapping** and assigns it.
 
 ## Build and Run (Docker / Local)
 
@@ -49,10 +75,18 @@ Running locally:
 go build ./cmd/bot
 ./bot -config config.yml
 ```
-*(Tokens can also be passed as environment variables: `DISCORD_TOKEN=... RESEND_API_KEY=...`)*
+
+With debug logging:
+```bash
+./bot -config config.yml -debug
+```
 
 The bot is designed to run in a single Docker container with the database (`.db` file) mounted in a volume (`/data`). The memory footprint is optimized to stay under 50 MB RAM.
 
 To run via Docker Compose:
 1. Create a `.env` file with `DISCORD_TOKEN` and `RESEND_API_KEY`.
 2. Run `docker-compose up -d --build`.
+
+## License
+
+MIT
