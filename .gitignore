@@ -1,6 +1,6 @@
 config.yml
 data/
-bot
+/bot
 *.db
 *.db-shm
 *.db-wal
