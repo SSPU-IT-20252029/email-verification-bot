@@ -1,0 +1,9 @@
+discord:
+  token: ${DISCORD_TOKEN}
+
+email:
+  api_key: ${RESEND_API_KEY}
+  from: "SŠPU E-mail Verify Discord Bot"
+
+storage:
+  dsn: "./data/verifier.db"

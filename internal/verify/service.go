@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sspu-verifier/internal/i18n"
 	"sspu-verifier/internal/store"
 )
 
@@ -37,7 +38,7 @@ func (e *WrongCodeError) Error() string {
 }
 
 type Mailer interface {
-	SendCode(to, subject, code string, ttl time.Duration) error
+	SendCode(to, subject, code string, ttl time.Duration, locale i18n.Locale) error
 }
 
 type Service struct {
@@ -54,7 +55,7 @@ func New(st *store.Store, m Mailer) *Service {
 	}
 }
 
-func (s *Service) Start(ctx context.Context, guildID, discordID, email string) error {
+func (s *Service) Start(ctx context.Context, guildID, discordID, email string, locale i18n.Locale) error {
 	email = strings.ToLower(strings.TrimSpace(email))
 
 	cfg, ok, err := s.store.GetGuildConfig(ctx, guildID)
@@ -70,7 +71,6 @@ func (s *Service) Start(ctx context.Context, guildID, discordID, email string) e
 		return ErrInvalidDomain
 	}
 
-	// Determine if email maps to any role before sending code
 	_, err = s.resolveRole(ctx, guildID, email, cfg.Mode)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func (s *Service) Start(ctx context.Context, guildID, discordID, email string) e
 		return err
 	}
 
-	if err := s.mailer.SendCode(email, cfg.Subject, code, cfg.CodeTTL); err != nil {
+	if err := s.mailer.SendCode(email, cfg.Subject, code, cfg.CodeTTL, locale); err != nil {
 		return errors.Join(ErrSendFailed, err)
 	}
 
