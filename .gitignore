@@ -4,3 +4,4 @@ bot
 *.db
 *.db-shm
 *.db-wal
+config.yml
