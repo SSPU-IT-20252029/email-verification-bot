@@ -9,20 +9,23 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
+	"strings"
 	"time"
 
-	"sspu-verifier/internal/class"
 	"sspu-verifier/internal/store"
 )
 
 var (
-	ErrNotActive        = errors.New("verify: e-mail zatím není aktivní, školní rok pro něj ještě nezačal")
+	ErrNotActive        = errors.New("verify: žádné pravidlo neodpovídá tomuto e-mailu")
 	ErrRateLimited      = errors.New("verify: překročen limit odeslaných kódů, zkus to později")
 	ErrNoPending        = errors.New("verify: žádný čekající kód, použij nejdřív /verify")
 	ErrExpired          = errors.New("verify: kód vypršel")
 	ErrTooManyAttempts  = errors.New("verify: příliš mnoho pokusů")
 	ErrSendFailed       = errors.New("verify: odeslání e-mailu selhalo")
 	ErrEmailAlreadyUsed = errors.New("verify: e-mail je přiřazen k jinému uživateli")
+	ErrInvalidDomain    = errors.New("verify: neplatná doména e-mailu pro tento server")
+	ErrMissingConfig    = errors.New("verify: tento server ještě není plně nastaven")
 )
 
 type WrongCodeError struct {
@@ -34,114 +37,156 @@ func (e *WrongCodeError) Error() string {
 }
 
 type Mailer interface {
-	SendCode(to, code string, ttl time.Duration) error
+	SendCode(to, subject, code string, ttl time.Duration) error
 }
 
 type Service struct {
-	store       *store.Store
-	mailer      Mailer
-	ttl         time.Duration
-	maxAttempts int
-	hourlyLimit int
-	Now         func() time.Time
+	store  *store.Store
+	mailer Mailer
+	Now    func() time.Time
 }
 
-func New(st *store.Store, m Mailer, ttl time.Duration, maxAttempts, hourlyLimit int) *Service {
+func New(st *store.Store, m Mailer) *Service {
 	return &Service{
-		store:       st,
-		mailer:      m,
-		ttl:         ttl,
-		maxAttempts: maxAttempts,
-		hourlyLimit: hourlyLimit,
-		Now:         time.Now,
+		store:  st,
+		mailer: m,
+		Now:    time.Now,
 	}
 }
 
-func (s *Service) Start(ctx context.Context, discordID, email string) error {
-	mail, err := class.Parse(email)
+func (s *Service) Start(ctx context.Context, guildID, discordID, email string) error {
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	cfg, ok, err := s.store.GetGuildConfig(ctx, guildID)
 	if err != nil {
 		return err
 	}
-	now := s.Now()
-	if _, ok := mail.Role(now); !ok {
-		return ErrNotActive
+	if !ok || cfg.Domain == "" {
+		return ErrMissingConfig
 	}
-	if existing, ok, err := s.store.GetVerifiedByEmail(ctx, mail.String()); err == nil && ok && existing.DiscordID != discordID {
+
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || parts[1] != cfg.Domain {
+		return ErrInvalidDomain
+	}
+
+	// Determine if email maps to any role before sending code
+	_, err = s.resolveRole(ctx, guildID, email, cfg.Mode)
+	if err != nil {
+		return err
+	}
+
+	now := s.Now()
+
+	if existing, ok, err := s.store.GetVerifiedByEmail(ctx, guildID, email); err == nil && ok && existing.DiscordID != discordID {
 		return ErrEmailAlreadyUsed
 	}
-	sent, err := s.store.CountSendsSince(ctx, discordID, now.Add(-time.Hour))
+
+	sent, err := s.store.CountSendsSince(ctx, guildID, discordID, now.Add(-time.Hour))
 	if err != nil {
 		return err
 	}
-	if sent >= s.hourlyLimit {
+	if sent >= cfg.RateLimitPerHour {
 		return ErrRateLimited
 	}
+
 	code, err := generateCode()
 	if err != nil {
 		return err
 	}
+
 	err = s.store.UpsertPending(ctx, store.Pending{
+		GuildID:   guildID,
 		DiscordID: discordID,
-		Email:     mail.String(),
+		Email:     email,
 		CodeHash:  hash(code),
-		ExpiresAt: now.Add(s.ttl),
+		ExpiresAt: now.Add(cfg.CodeTTL),
 		Attempts:  0,
 	})
 	if err != nil {
 		return err
 	}
-	if err := s.mailer.SendCode(mail.String(), code, s.ttl); err != nil {
+
+	if err := s.mailer.SendCode(email, cfg.Subject, code, cfg.CodeTTL); err != nil {
 		return errors.Join(ErrSendFailed, err)
 	}
-	return s.store.LogSend(ctx, discordID, now)
+
+	return s.store.LogSend(ctx, guildID, discordID, now)
 }
 
-func (s *Service) Confirm(ctx context.Context, discordID, code string) (string, error) {
-	pending, ok, err := s.store.GetPending(ctx, discordID)
+func (s *Service) Confirm(ctx context.Context, guildID, discordID, code string) (string, error) {
+	pending, ok, err := s.store.GetPending(ctx, guildID, discordID)
 	if err != nil {
 		return "", err
 	}
 	if !ok {
 		return "", ErrNoPending
 	}
-	now := s.Now()
-	if now.After(pending.ExpiresAt) {
-		if err := s.store.DeletePending(ctx, discordID); err != nil {
-			return "", err
-		}
-		return "", ErrExpired
-	}
-	if subtle.ConstantTimeCompare([]byte(hash(normalizeCode(code))), []byte(pending.CodeHash)) != 1 {
-		attempts, err := s.store.IncrementAttempts(ctx, discordID)
-		if err != nil {
-			return "", err
-		}
-		if attempts >= s.maxAttempts {
-			if err := s.store.DeletePending(ctx, discordID); err != nil {
-				return "", err
-			}
-			return "", ErrTooManyAttempts
-		}
-		return "", &WrongCodeError{Remaining: s.maxAttempts - attempts}
-	}
-	mail, err := class.Parse(pending.Email)
+
+	cfg, ok, err := s.store.GetGuildConfig(ctx, guildID)
 	if err != nil {
 		return "", err
 	}
-	role, ok := mail.Role(now)
 	if !ok {
-		if err := s.store.DeletePending(ctx, discordID); err != nil {
+		return "", ErrMissingConfig
+	}
+
+	now := s.Now()
+	if now.After(pending.ExpiresAt) {
+		_ = s.store.DeletePending(ctx, guildID, discordID)
+		return "", ErrExpired
+	}
+
+	if subtle.ConstantTimeCompare([]byte(hash(normalizeCode(code))), []byte(pending.CodeHash)) != 1 {
+		attempts, err := s.store.IncrementAttempts(ctx, guildID, discordID)
+		if err != nil {
 			return "", err
 		}
+		if attempts >= cfg.MaxAttempts {
+			_ = s.store.DeletePending(ctx, guildID, discordID)
+			return "", ErrTooManyAttempts
+		}
+		return "", &WrongCodeError{Remaining: cfg.MaxAttempts - attempts}
+	}
+
+	roleID, err := s.resolveRole(ctx, guildID, pending.Email, cfg.Mode)
+	if err != nil {
+		_ = s.store.DeletePending(ctx, guildID, discordID)
+		return "", err
+	}
+
+	if err := s.store.SetVerified(ctx, guildID, discordID, pending.Email, roleID); err != nil {
+		return "", err
+	}
+	_ = s.store.DeletePending(ctx, guildID, discordID)
+
+	return roleID, nil
+}
+
+func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) (string, error) {
+	if mode == "REGEX" {
+		rules, err := s.store.ListRegexRules(ctx, guildID)
+		if err != nil {
+			return "", err
+		}
+		for _, rule := range rules {
+			matched, err := regexp.MatchString(rule.Pattern, email)
+			if err == nil && matched {
+				return rule.RoleID, nil
+			}
+		}
 		return "", ErrNotActive
+	} else if mode == "CSV" {
+		roleID, ok, err := s.store.GetRoleByCSVEmail(ctx, guildID, email)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", ErrNotActive
+		}
+		return roleID, nil
 	}
-	if err := s.store.SetVerified(ctx, discordID, pending.Email, role); err != nil {
-		return "", err
-	}
-	if err := s.store.DeletePending(ctx, discordID); err != nil {
-		return "", err
-	}
-	return role, nil
+	return "", ErrMissingConfig
 }
 
 func generateCode() (string, error) {
