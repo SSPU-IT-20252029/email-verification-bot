@@ -26,3 +26,4 @@ RUN mkdir -p /app/data
 # Nespouštíme to pod rootem z bezpečnostních důvodů (volitelné, ale dobrá praxe)
 # Zde si vystačíme s jednoduchým runem
 CMD ["./verifier-bot"]
+

@@ -11,3 +11,4 @@ services:
       # Tokeny můžeš dát sem, nebo je načíst z .env souboru
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - RESEND_API_KEY=${RESEND_API_KEY}
+
