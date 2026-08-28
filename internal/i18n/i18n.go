@@ -40,6 +40,10 @@ type Translations struct {
 	CsvRole          string
 	LanguageDesc     string
 	LanguageSetFmt   string
+	RateLimitDesc    string
+	RateLimitCountDesc string
+	RateLimitWindowDesc string
+	RateLimitSetFmt  string
 
 	VerifyBtn        string
 	EnterCodeBtn     string
@@ -84,6 +88,7 @@ type Translations struct {
 
 	EmailHello        string
 	EmailCodeFor      string
+	EmailCopyBtn      string
 	EmailValidForFmt  string
 	EmailSenderFallback string
 	DefaultSubject    string
@@ -112,6 +117,10 @@ var en = Translations{
 	CsvRole:          "Discord role",
 	LanguageDesc:     "Language",
 	LanguageSetFmt:   "Language set to %s.",
+	RateLimitDesc:    "Set email rate limits",
+	RateLimitCountDesc: "Max emails (1-3)",
+	RateLimitWindowDesc: "Window in minutes (1-60)",
+	RateLimitSetFmt:  "Rate limit set to %s",
 
 	VerifyBtn:        "Verify",
 	EnterCodeBtn:     "Enter Code",
@@ -156,6 +165,7 @@ var en = Translations{
 
 	EmailHello:         "Hello,",
 	EmailCodeFor:       "Your verification code for Discord is:",
+	EmailCopyBtn:       "COPY",
 	EmailValidForFmt:   "The code is valid for %d minutes. If you did not request this, please ignore this email.",
 	EmailSenderFallback: "Discord bot",
 	DefaultSubject:     "Verification code",
@@ -184,6 +194,10 @@ var cs = Translations{
 	CsvRole:          "Discord role",
 	LanguageDesc:     "Jazyk",
 	LanguageSetFmt:   "Jazyk nastaven na %s.",
+	RateLimitDesc:    "Nastavit limity emailů",
+	RateLimitCountDesc: "Max emailů (1-3)",
+	RateLimitWindowDesc: "Časové okno v minutách (1-60)",
+	RateLimitSetFmt:  "Limit nastaven na %s",
 
 	VerifyBtn:        "Ověřit",
 	EnterCodeBtn:     "Zadat kód",
@@ -228,6 +242,7 @@ var cs = Translations{
 
 	EmailHello:          "Dobrý den,",
 	EmailCodeFor:        "Váš ověřovací kód pro Discord je:",
+	EmailCopyBtn:        "ZKOPÍROVAT",
 	EmailValidForFmt:    "Kód je platný %d minut. Pokud jste o něj nežádali, ignorujte tento e-mail.",
 	EmailSenderFallback: "Discord bot",
 	DefaultSubject:      "Ověřovací kód",

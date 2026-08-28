@@ -213,6 +213,25 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 			DefaultMemberPermissions: func(i int64) *int64 { return &i }(discordgo.PermissionAdministrator),
 		},
 		{
+			Name:        "ratelimit",
+			Description: en.RateLimitDesc,
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "count",
+					Description: en.RateLimitCountDesc,
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Name:        "window",
+					Description: en.RateLimitWindowDesc,
+					Required:    true,
+				},
+			},
+			DefaultMemberPermissions: func(i int64) *int64 { return &i }(discordgo.PermissionAdministrator),
+		},
+		{
 			Name:        "language",
 			Description: "Change bot language",
 			Options: []*discordgo.ApplicationCommandOption{
@@ -258,6 +277,8 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 		b.cmdCSV(s, i)
 	case "language":
 		b.cmdLanguage(s, i)
+	case "ratelimit":
+		b.cmdRateLimit(s, i)
 	}
 }
 
@@ -287,7 +308,8 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		Subject:          subject,
 		CodeTTL:          10 * time.Minute,
 		MaxAttempts:      5,
-		RateLimitPerHour: 3,
+		RateLimitCount:   3,
+		RateLimitWindow:  15 * time.Minute,
 	}
 
 	if err := b.store.SaveGuildConfig(context.Background(), cfg); err != nil {
@@ -569,6 +591,44 @@ func (b *Bot) cmdLanguage(s *discordgo.Session, i *discordgo.InteractionCreate) 
 		langName = "Čeština"
 	}
 	respondOK(s, i, fmt.Sprintf(t.LanguageSetFmt, langName))
+}
+
+func (b *Bot) cmdRateLimit(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
+	var count int64 = 3
+	var window int64 = 30
+	for _, o := range i.ApplicationCommandData().Options {
+		if o.Name == "count" {
+			count = o.IntValue()
+		} else if o.Name == "window" {
+			window = o.IntValue()
+		}
+	}
+
+	if count < 1 || count > 3 || window < 15 || window > 60 {
+		respondErr(s, i, t.FailedSave)
+		return
+	}
+
+	cfg, ok, err := b.store.GetGuildConfig(context.Background(), i.GuildID)
+	if err != nil {
+		respondErr(s, i, t.FailedSave)
+		return
+	}
+	if !ok {
+		respondErr(s, i, i18n.Get(i18n.LocaleEN).ErrMissingConfig)
+		return
+	}
+
+	cfg.RateLimitCount = int(count)
+	cfg.RateLimitWindow = time.Duration(window) * time.Minute
+
+	if err := b.store.SaveGuildConfig(context.Background(), cfg); err != nil {
+		respondErr(s, i, t.FailedSave)
+		return
+	}
+
+	respondOK(s, i, fmt.Sprintf("%s %d / %d min.", t.RateLimitSetFmt, cfg.RateLimitCount, int(cfg.RateLimitWindow.Minutes())))
 }
 
 func respondOK(s *discordgo.Session, i *discordgo.InteractionCreate, msg string) {

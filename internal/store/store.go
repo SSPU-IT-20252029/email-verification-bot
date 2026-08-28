@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -19,7 +20,8 @@ type GuildConfig struct {
 	Subject           string
 	CodeTTL           time.Duration
 	MaxAttempts       int
-	RateLimitPerHour  int
+	RateLimitCount    int
+	RateLimitWindow   time.Duration
 }
 
 type RegexRule struct {
@@ -80,7 +82,8 @@ CREATE TABLE IF NOT EXISTS guilds (
 	subject             TEXT,
 	code_ttl            INTEGER,
 	max_attempts        INTEGER,
-	rate_limit_per_hour INTEGER
+	rate_limit_count    INTEGER NOT NULL DEFAULT 3,
+	rate_limit_window   INTEGER NOT NULL DEFAULT 15
 );
 CREATE TABLE IF NOT EXISTS regex_rules (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,6 +146,29 @@ CREATE TABLE IF NOT EXISTS user_locales (
 	if err != nil {
 		return fmt.Errorf("database migration: %w", err)
 	}
+	if err := s.migrateRateLimit(); err != nil {
+		return fmt.Errorf("rate limit migration: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) migrateRateLimit() error {
+	_, err := s.db.Exec(`ALTER TABLE guilds ADD COLUMN rate_limit_count INTEGER NOT NULL DEFAULT 3`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	_, err = s.db.Exec(`ALTER TABLE guilds ADD COLUMN rate_limit_window INTEGER NOT NULL DEFAULT 15`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE guilds SET rate_limit_count = COALESCE(NULLIF(rate_limit_count, 0), 3), rate_limit_window = COALESCE(NULLIF(rate_limit_window, 0), 15) WHERE rate_limit_count IS NULL OR rate_limit_window IS NULL`)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`UPDATE guilds SET rate_limit_count = rate_limit_per_hour, rate_limit_window = 15 WHERE rate_limit_per_hour IS NOT NULL AND rate_limit_count = 3 AND rate_limit_window = 15`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -153,8 +179,8 @@ func (s *Store) Close() error {
 // Guild Config
 func (s *Store) SaveGuildConfig(ctx context.Context, g GuildConfig) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO guilds (guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_per_hour)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO guilds (guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(guild_id) DO UPDATE SET 
 		 verify_channel_id=excluded.verify_channel_id,
 		 domain=excluded.domain,
@@ -162,18 +188,19 @@ func (s *Store) SaveGuildConfig(ctx context.Context, g GuildConfig) error {
 		 subject=excluded.subject,
 		 code_ttl=excluded.code_ttl,
 		 max_attempts=excluded.max_attempts,
-		 rate_limit_per_hour=excluded.rate_limit_per_hour`,
-		g.GuildID, g.VerifyChannelID, g.Domain, g.Mode, g.Subject, int64(g.CodeTTL), g.MaxAttempts, g.RateLimitPerHour)
+		 rate_limit_count=excluded.rate_limit_count,
+		 rate_limit_window=excluded.rate_limit_window`,
+		g.GuildID, g.VerifyChannelID, g.Domain, g.Mode, g.Subject, int64(g.CodeTTL), g.MaxAttempts, g.RateLimitCount, int64(g.RateLimitWindow))
 	return err
 }
 
 func (s *Store) GetGuildConfig(ctx context.Context, guildID string) (GuildConfig, bool, error) {
 	var g GuildConfig
-	var ttl int64
+	var ttl, window int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_per_hour
+		`SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window
 		 FROM guilds WHERE guild_id = ?`, guildID).
-		Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitPerHour)
+		Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitCount, &window)
 	if err == sql.ErrNoRows {
 		return GuildConfig{}, false, nil
 	}
@@ -181,11 +208,12 @@ func (s *Store) GetGuildConfig(ctx context.Context, guildID string) (GuildConfig
 		return GuildConfig{}, false, err
 	}
 	g.CodeTTL = time.Duration(ttl)
+	g.RateLimitWindow = time.Duration(window)
 	return g, true, nil
 }
 
 func (s *Store) ListGuildConfigs(ctx context.Context) ([]GuildConfig, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_per_hour FROM guilds`)
+	rows, err := s.db.QueryContext(ctx, `SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window FROM guilds`)
 	if err != nil {
 		return nil, err
 	}
@@ -193,11 +221,12 @@ func (s *Store) ListGuildConfigs(ctx context.Context) ([]GuildConfig, error) {
 	var out []GuildConfig
 	for rows.Next() {
 		var g GuildConfig
-		var ttl int64
-		if err := rows.Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitPerHour); err != nil {
+		var ttl, window int64
+		if err := rows.Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitCount, &window); err != nil {
 			return nil, err
 		}
 		g.CodeTTL = time.Duration(ttl)
+		g.RateLimitWindow = time.Duration(window)
 		out = append(out, g)
 	}
 	return out, nil

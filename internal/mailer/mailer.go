@@ -51,6 +51,8 @@ func (m *Mailer) buildText(code string, ttl time.Duration, locale i18n.Locale) s
 		"",
 		"    " + code,
 		"",
+		"[" + t.EmailCopyBtn + "]",
+		"",
 		fmt.Sprintf(t.EmailValidForFmt, int(ttl.Minutes())),
 		"",
 		senderName(m.cfg.From, locale),
@@ -66,7 +68,15 @@ var htmlTpl = template.Must(template.New("code").Parse(`<!doctype html>
 <tr><td style="width:32px;"></td><td style="font-size:20px;font-weight:700;color:#111827;">{{.Title}}</td><td style="width:32px;"></td></tr>
 <tr><td colspan="3" style="height:8px;"></td></tr>
 <tr><td style="width:32px;"></td><td style="font-size:15px;line-height:22px;color:#374151;">{{.Hello}}<br>{{.CodeFor}}</td><td style="width:32px;"></td></tr>
-<tr><td style="width:32px;"></td><td align="center" style="padding:24px 0;"><div style="display:inline-block;background-color:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:14px 28px;font-family:'SF Mono',Consolas,Menlo,monospace;font-size:34px;font-weight:700;letter-spacing:10px;text-indent:10px;color:#1d4ed8;">{{.Code}}</div></td><td style="width:32px;"></td></tr>
+<tr><td colspan="3" style="height:24px;"></td></tr>
+<tr><td style="width:32px;"></td><td align="center" style="padding:0 0 24px 0;">
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+<tr>
+<td style="background-color:#eef2ff;border:1px solid #c7d2fe;border-radius:10px 0 0 10px;padding:14px 24px;font-family:'SF Mono',Consolas,Menlo,monospace;font-size:34px;font-weight:700;letter-spacing:10px;color:#1d4ed8;user-select:all;-webkit-user-select:all;">{{.Code}}</td>
+<td style="background-color:#c7d2fe;border-radius:0 10px 10px 0;padding:14px 18px;font-size:13px;font-weight:700;color:#3730a3;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">{{.CopyBtn}}</td>
+</tr>
+</table>
+</td><td style="width:32px;"></td></tr>
 <tr><td style="width:32px;"></td><td style="font-size:13px;line-height:20px;color:#6b7280;">{{.ValidFor}}</td><td style="width:32px;"></td></tr>
 <tr><td colspan="3" style="height:24px;"></td></tr>
 <tr><td style="width:32px;"></td><td style="font-size:13px;color:#9ca3af;">{{.Sender}}</td><td style="width:32px;"></td></tr>
@@ -87,6 +97,7 @@ func (m *Mailer) buildHTML(code string, ttl time.Duration, locale i18n.Locale) s
 		"Title":   t.HTMLTitle,
 		"Hello":   t.EmailHello,
 		"CodeFor": t.EmailCodeFor,
+		"CopyBtn": t.EmailCopyBtn,
 		"ValidFor": fmt.Sprintf(t.EmailValidForFmt, int(ttl.Minutes())),
 	})
 	if err != nil {

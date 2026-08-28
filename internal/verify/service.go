@@ -82,11 +82,11 @@ func (s *Service) Start(ctx context.Context, guildID, discordID, email string, l
 		return ErrEmailAlreadyUsed
 	}
 
-	sent, err := s.store.CountSendsSince(ctx, guildID, discordID, now.Add(-time.Hour))
+	sent, err := s.store.CountSendsSince(ctx, guildID, discordID, now.Add(-cfg.RateLimitWindow))
 	if err != nil {
 		return err
 	}
-	if sent >= cfg.RateLimitPerHour {
+	if sent >= cfg.RateLimitCount {
 		return ErrRateLimited
 	}
 
