@@ -115,62 +115,60 @@ func (s *Service) Start(ctx context.Context, guildID, discordID, email string, l
 	return s.store.LogSend(ctx, guildID, discordID, now)
 }
 
-func (s *Service) Confirm(ctx context.Context, guildID, discordID, code string) (string, error) {
+func (s *Service) Confirm(ctx context.Context, guildID, discordID, code string) ([]string, error) {
 	pending, ok, err := s.store.GetPending(ctx, guildID, discordID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !ok {
-		return "", ErrNoPending
+		return nil, ErrNoPending
 	}
 
 	cfg, ok, err := s.store.GetGuildConfig(ctx, guildID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !ok {
-		return "", ErrMissingConfig
+		return nil, ErrMissingConfig
 	}
 
 	now := s.Now()
 	if now.After(pending.ExpiresAt) {
 		_ = s.store.DeletePending(ctx, guildID, discordID)
-		return "", ErrExpired
+		return nil, ErrExpired
 	}
 
 	if subtle.ConstantTimeCompare([]byte(hash(normalizeCode(code))), []byte(pending.CodeHash)) != 1 {
 		attempts, err := s.store.IncrementAttempts(ctx, guildID, discordID)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		if attempts >= cfg.MaxAttempts {
 			_ = s.store.DeletePending(ctx, guildID, discordID)
-			return "", ErrTooManyAttempts
+			return nil, ErrTooManyAttempts
 		}
-		return "", &WrongCodeError{Remaining: cfg.MaxAttempts - attempts}
+		return nil, &WrongCodeError{Remaining: cfg.MaxAttempts - attempts}
 	}
 
 	roleID, err := s.resolveRole(ctx, guildID, pending.Email, cfg.Mode)
 	if err != nil {
 		_ = s.store.DeletePending(ctx, guildID, discordID)
-		return "", err
+		return nil, err
 	}
 
 	if err := s.store.SetVerified(ctx, guildID, discordID, pending.Email, roleID); err != nil {
-		return "", err
+		return nil, err
 	}
 	_ = s.store.DeletePending(ctx, guildID, discordID)
 
-	return roleID, nil
+	roles := []string{roleID}
+	if cfg.DefaultRoleID != "" && cfg.DefaultRoleID != roleID {
+		roles = append(roles, cfg.DefaultRoleID)
+	}
+	return roles, nil
 }
 
 func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) (string, error) {
-	cfg, _, err := s.store.GetGuildConfig(ctx, guildID)
-	if err != nil {
-		return "", err
-	}
-	defaultRole := cfg.DefaultRoleID
-
 	if mode == "REGEX" {
 		rules, err := s.store.ListRegexRules(ctx, guildID)
 		if err != nil {
@@ -201,22 +199,16 @@ func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) 
 			}
 			return rule.RoleID, nil
 		}
-		if defaultRole != "" {
-			return defaultRole, nil
-		}
 		return "", ErrNotActive
 	} else if mode == "CSV" {
 		roleID, ok, err := s.store.GetRoleByCSVEmail(ctx, guildID, email)
 		if err != nil {
 			return "", err
 		}
-		if ok {
-			return roleID, nil
+		if !ok {
+			return "", ErrNotActive
 		}
-		if defaultRole != "" {
-			return defaultRole, nil
-		}
-		return "", ErrNotActive
+		return roleID, nil
 	}
 	return "", ErrMissingConfig
 }
