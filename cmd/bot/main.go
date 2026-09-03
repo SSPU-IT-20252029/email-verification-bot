@@ -277,6 +277,31 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 			DefaultMemberPermissions: func(i int64) *int64 { return &i }(discordgo.PermissionAdministrator),
 		},
 		{
+			Name:        "verifiedrole",
+			Description: en.VerifiedRoleDesc,
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "set",
+					Description: en.VerifiedRoleSet,
+					Options: []*discordgo.ApplicationCommandOption{
+						{Type: discordgo.ApplicationCommandOptionRole, Name: "role", Description: en.VerifiedRoleRole, Required: true},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "view",
+					Description: en.VerifiedRoleView,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "clear",
+					Description: en.VerifiedRoleClear,
+				},
+			},
+			DefaultMemberPermissions: func(i int64) *int64 { return &i }(discordgo.PermissionAdministrator),
+		},
+		{
 			Name:        "language",
 			Description: "Change bot language",
 			Options: []*discordgo.ApplicationCommandOption{
@@ -339,6 +364,8 @@ func (b *Bot) handleSlashCommand(s *discordgo.Session, i *discordgo.InteractionC
 		b.cmdLanguage(s, i)
 	case "ratelimit":
 		b.cmdRateLimit(s, i)
+	case "verifiedrole":
+		b.cmdVerifiedRole(s, i)
 	case "help":
 		b.cmdHelp(s, i)
 	}
@@ -372,6 +399,10 @@ func (b *Bot) cmdSetup(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		MaxAttempts:      5,
 		RateLimitCount:   3,
 		RateLimitWindow:  15 * time.Minute,
+	}
+
+	if existing, ok, err := b.store.GetGuildConfig(context.Background(), i.GuildID); err == nil && ok {
+		cfg.DefaultRoleID = existing.DefaultRoleID
 	}
 
 	if err := b.store.SaveGuildConfig(context.Background(), cfg); err != nil {
@@ -749,6 +780,53 @@ func (b *Bot) cmdRateLimit(s *discordgo.Session, i *discordgo.InteractionCreate)
 	respondOK(s, i, fmt.Sprintf("%s %d / %d min.", t.RateLimitSetFmt, cfg.RateLimitCount, int(cfg.RateLimitWindow.Minutes())))
 }
 
+func (b *Bot) cmdVerifiedRole(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	t := i18n.Get(b.getLocale(i))
+	subcmd := i.ApplicationCommandData().Options[0]
+
+	ctx := context.Background()
+	cfg, ok, err := b.store.GetGuildConfig(ctx, i.GuildID)
+	if err != nil {
+		respondErr(s, i, t.FailedSave)
+		return
+	}
+	if !ok {
+		respondErr(s, i, i18n.Get(i18n.LocaleEN).ErrMissingConfig)
+		return
+	}
+
+	switch subcmd.Name {
+	case "set":
+		var roleID string
+		for _, o := range subcmd.Options {
+			if o.Name == "role" {
+				roleID = o.RoleValue(nil, "").ID
+			}
+		}
+		cfg.DefaultRoleID = roleID
+		if err := b.store.SaveGuildConfig(ctx, cfg); err != nil {
+			respondErr(s, i, t.FailedSave)
+			return
+		}
+		respondOK(s, i, fmt.Sprintf(t.VerifiedRoleSetFmt, roleID))
+
+	case "view":
+		if cfg.DefaultRoleID == "" {
+			respondOK(s, i, t.VerifiedRoleNotSet)
+			return
+		}
+		respondOK(s, i, fmt.Sprintf(t.VerifiedRoleViewFmt, cfg.DefaultRoleID))
+
+	case "clear":
+		cfg.DefaultRoleID = ""
+		if err := b.store.SaveGuildConfig(ctx, cfg); err != nil {
+			respondErr(s, i, t.FailedSave)
+			return
+		}
+		respondOK(s, i, t.VerifiedRoleCleared)
+	}
+}
+
 func (b *Bot) cmdHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	t := i18n.Get(b.getLocale(i))
 
@@ -757,7 +835,8 @@ func (b *Bot) cmdHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	description += "`/setup` - " + t.SetupDesc + "\n"
 	description += "`/regex` - " + t.RegexDesc + "\n"
 	description += "`/csv` - " + t.CsvDesc + "\n"
-	description += "`/ratelimit` - " + t.RateLimitDesc + "\n\n"
+	description += "`/ratelimit` - " + t.RateLimitDesc + "\n"
+	description += "`/verifiedrole` - " + t.VerifiedRoleDesc + "\n\n"
 	description += "**" + t.HelpUserTitle + "**\n"
 	description += "`/language` - " + t.LanguageDesc + "\n"
 	description += "`/help` - " + t.HelpDesc

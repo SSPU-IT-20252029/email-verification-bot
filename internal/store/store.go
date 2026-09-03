@@ -22,6 +22,7 @@ type GuildConfig struct {
 	MaxAttempts       int
 	RateLimitCount    int
 	RateLimitWindow   time.Duration
+	DefaultRoleID     string
 }
 
 type RegexRule struct {
@@ -84,7 +85,8 @@ CREATE TABLE IF NOT EXISTS guilds (
 	code_ttl            INTEGER,
 	max_attempts        INTEGER,
 	rate_limit_count    INTEGER NOT NULL DEFAULT 3,
-	rate_limit_window   INTEGER NOT NULL DEFAULT 15
+	rate_limit_window   INTEGER NOT NULL DEFAULT 15,
+	default_role_id     TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS regex_rules (
 	id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,6 +164,17 @@ CREATE TABLE IF NOT EXISTS user_locales (
 	if err := s.migrateRegexGroups(); err != nil {
 		return fmt.Errorf("regex groups migration: %w", err)
 	}
+	if err := s.migrateDefaultRole(); err != nil {
+		return fmt.Errorf("default role migration: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) migrateDefaultRole() error {
+	_, err := s.db.Exec(`ALTER TABLE guilds ADD COLUMN default_role_id TEXT NOT NULL DEFAULT ''`)
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return err
+	}
 	return nil
 }
 
@@ -222,8 +235,8 @@ func (s *Store) Close() error {
 // Guild Config
 func (s *Store) SaveGuildConfig(ctx context.Context, g GuildConfig) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO guilds (guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO guilds (guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window, default_role_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(guild_id) DO UPDATE SET 
 		 verify_channel_id=excluded.verify_channel_id,
 		 domain=excluded.domain,
@@ -232,8 +245,9 @@ func (s *Store) SaveGuildConfig(ctx context.Context, g GuildConfig) error {
 		 code_ttl=excluded.code_ttl,
 		 max_attempts=excluded.max_attempts,
 		 rate_limit_count=excluded.rate_limit_count,
-		 rate_limit_window=excluded.rate_limit_window`,
-		g.GuildID, g.VerifyChannelID, g.Domain, g.Mode, g.Subject, int64(g.CodeTTL), g.MaxAttempts, g.RateLimitCount, int64(g.RateLimitWindow))
+		 rate_limit_window=excluded.rate_limit_window,
+		 default_role_id=excluded.default_role_id`,
+		g.GuildID, g.VerifyChannelID, g.Domain, g.Mode, g.Subject, int64(g.CodeTTL), g.MaxAttempts, g.RateLimitCount, int64(g.RateLimitWindow), g.DefaultRoleID)
 	return err
 }
 
@@ -241,9 +255,9 @@ func (s *Store) GetGuildConfig(ctx context.Context, guildID string) (GuildConfig
 	var g GuildConfig
 	var ttl, window int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window
+		`SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window, default_role_id
 		 FROM guilds WHERE guild_id = ?`, guildID).
-		Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitCount, &window)
+		Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitCount, &window, &g.DefaultRoleID)
 	if err == sql.ErrNoRows {
 		return GuildConfig{}, false, nil
 	}
@@ -256,7 +270,7 @@ func (s *Store) GetGuildConfig(ctx context.Context, guildID string) (GuildConfig
 }
 
 func (s *Store) ListGuildConfigs(ctx context.Context) ([]GuildConfig, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window FROM guilds`)
+	rows, err := s.db.QueryContext(ctx, `SELECT guild_id, verify_channel_id, domain, mode, subject, code_ttl, max_attempts, rate_limit_count, rate_limit_window, default_role_id FROM guilds`)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +279,7 @@ func (s *Store) ListGuildConfigs(ctx context.Context) ([]GuildConfig, error) {
 	for rows.Next() {
 		var g GuildConfig
 		var ttl, window int64
-		if err := rows.Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitCount, &window); err != nil {
+		if err := rows.Scan(&g.GuildID, &g.VerifyChannelID, &g.Domain, &g.Mode, &g.Subject, &ttl, &g.MaxAttempts, &g.RateLimitCount, &window, &g.DefaultRoleID); err != nil {
 			return nil, err
 		}
 		g.CodeTTL = time.Duration(ttl)
