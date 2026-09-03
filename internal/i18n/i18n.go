@@ -53,6 +53,15 @@ type Translations struct {
 	RateLimitCountDesc string
 	RateLimitWindowDesc string
 	RateLimitSetFmt  string
+	VerifiedRoleDesc string
+	VerifiedRoleSet  string
+	VerifiedRoleView string
+	VerifiedRoleClear string
+	VerifiedRoleRole string
+	VerifiedRoleSetFmt string
+	VerifiedRoleViewFmt string
+	VerifiedRoleCleared string
+	VerifiedRoleNotSet string
 	HelpDesc         string
 	HelpText         string
 	HelpAdminTitle   string
@@ -144,6 +153,15 @@ var en = Translations{
 	RateLimitCountDesc: "Max emails (1-3)",
 	RateLimitWindowDesc: "Window in minutes (1-60)",
 	RateLimitSetFmt:  "Rate limit set to %s",
+	VerifiedRoleDesc: "Set the default role assigned to every verified user",
+	VerifiedRoleSet:  "Set the default verified role",
+	VerifiedRoleView: "Show the current default verified role",
+	VerifiedRoleClear: "Clear the default verified role",
+	VerifiedRoleRole: "Discord role",
+	VerifiedRoleSetFmt: "Default verified role set to <@&%s>.",
+	VerifiedRoleViewFmt: "Default verified role: <@&%s>",
+	VerifiedRoleCleared: "Default verified role cleared.",
+	VerifiedRoleNotSet: "No default verified role is currently set.",
 	HelpDesc:         "Show all commands",
 	HelpText:         "Available Commands",
 	HelpAdminTitle:   "Administrator",
@@ -235,6 +253,15 @@ var cs = Translations{
 	RateLimitCountDesc: "Max emailů (1-3)",
 	RateLimitWindowDesc: "Časové okno v minutách (1-60)",
 	RateLimitSetFmt:  "Limit nastaven na %s",
+	VerifiedRoleDesc: "Nastavit výchozí roli přiřazenou každému ověřenému uživateli",
+	VerifiedRoleSet:  "Nastavit výchozí roli pro ověřené",
+	VerifiedRoleView: "Zobrazit aktuální výchozí roli pro ověřené",
+	VerifiedRoleClear: "Odebrat výchozí roli pro ověřené",
+	VerifiedRoleRole: "Discord role",
+	VerifiedRoleSetFmt: "Výchozí role pro ověřené nastavena na <@&%s>.",
+	VerifiedRoleViewFmt: "Výchozí role pro ověřené: <@&%s>",
+	VerifiedRoleCleared: "Výchozí role pro ověřené odebrána.",
+	VerifiedRoleNotSet: "Výchozí role pro ověřené není momentálně nastavena.",
 	HelpDesc:         "Zobrazit všechny příkazy",
 	HelpText:         "Dostupné příkazy",
 	HelpAdminTitle:   "Administrátor",

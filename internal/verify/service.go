@@ -165,6 +165,12 @@ func (s *Service) Confirm(ctx context.Context, guildID, discordID, code string) 
 }
 
 func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) (string, error) {
+	cfg, _, err := s.store.GetGuildConfig(ctx, guildID)
+	if err != nil {
+		return "", err
+	}
+	defaultRole := cfg.DefaultRoleID
+
 	if mode == "REGEX" {
 		rules, err := s.store.ListRegexRules(ctx, guildID)
 		if err != nil {
@@ -195,16 +201,22 @@ func (s *Service) resolveRole(ctx context.Context, guildID, email, mode string) 
 			}
 			return rule.RoleID, nil
 		}
+		if defaultRole != "" {
+			return defaultRole, nil
+		}
 		return "", ErrNotActive
 	} else if mode == "CSV" {
 		roleID, ok, err := s.store.GetRoleByCSVEmail(ctx, guildID, email)
 		if err != nil {
 			return "", err
 		}
-		if !ok {
-			return "", ErrNotActive
+		if ok {
+			return roleID, nil
 		}
-		return roleID, nil
+		if defaultRole != "" {
+			return defaultRole, nil
+		}
+		return "", ErrNotActive
 	}
 	return "", ErrMissingConfig
 }
