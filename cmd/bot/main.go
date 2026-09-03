@@ -704,16 +704,17 @@ func (b *Bot) handleModal(s *discordgo.Session, i *discordgo.InteractionCreate) 
 		if l, _, err := b.store.GetUserLocale(context.Background(), i.GuildID, i.Member.User.ID); err == nil && l != "" {
 			userLocale = i18n.ParseLocale(l)
 		}
-		roleID, err := b.verify.Confirm(context.Background(), i.GuildID, i.Member.User.ID, code)
+		roleIDs, err := b.verify.Confirm(context.Background(), i.GuildID, i.Member.User.ID, code)
 		if err != nil {
 			respondErr(s, i, b.localizeError(i, err))
 			return
 		}
 
-		err = s.GuildMemberRoleAdd(i.GuildID, i.Member.User.ID, roleID)
-		if err != nil {
-			respondErr(s, i, i18n.Get(userLocale).ErrSendFailed)
-			return
+		for _, roleID := range roleIDs {
+			if err := s.GuildMemberRoleAdd(i.GuildID, i.Member.User.ID, roleID); err != nil {
+				respondErr(s, i, i18n.Get(userLocale).ErrSendFailed)
+				return
+			}
 		}
 
 		respondOK(s, i, i18n.Get(userLocale).VerifySuccess)
