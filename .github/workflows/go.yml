@@ -10,12 +10,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    # actions/checkout@v4.1.7
-    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+    # actions/checkout@v4.2.2
+    - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
 
-    # actions/setup-go@v5.0.2
+    # actions/setup-go@v5.3.0
     - name: Set up Go
-      uses: actions/setup-go@0a12ed9c6a96ab950c8f026ed9f722fe0da7ef32
+      uses: actions/setup-go@34829cb9acb0c3aab260216f67d0867cc080dca5
       with:
         go-version: '1.22'
 
