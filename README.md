@@ -78,4 +78,4 @@ To run via Docker Compose:
 
 ## License
 
-MIT
+AGPL v3.0
